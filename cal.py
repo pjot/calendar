@@ -49,7 +49,7 @@ class CalendarDay (Gtk.EventBox):
 
 
 class MyWindow (Gtk.Window):
-    days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    days = ['Week', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
     def dummy (self, *args):
         pass
@@ -116,12 +116,12 @@ class MyWindow (Gtk.Window):
         self.add(self.app_container)
 
         # Add days labels
-        for x in range(0, 7):
+        for x in range(0, 8):
             label = Gtk.Label()
             label.set_text(self.days[x])
             label.set_vexpand(False)
             label.set_hexpand(False)
-            days_grid.attach(label, x, 0, 1, 1)
+            days_grid.attach(label, x + 1, 0, 1, 1)
 
         # Add calendar days
         start_date = date(2014, 1, 1)
@@ -134,9 +134,12 @@ class MyWindow (Gtk.Window):
 
         while start_date < end_date:
             calendar_day = CalendarDay(start_date)
+            if x == 6:
+                week = int(start_date.strftime('%W')) + 1
+                self.grid.attach(Gtk.Label(str(week)), 0, y, 1, 1)
             calendar_day.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
             calendar_day.connect('button-press-event', self.date_click)
-            self.grid.attach(calendar_day, x, y, 1, 1)
+            self.grid.attach(calendar_day, x + 1, y, 1, 1)
             start_date = start_date + day
             if x == 6:
                 x = 0
@@ -154,9 +157,11 @@ class MyWindow (Gtk.Window):
         parent_allocation = scroller.get_allocation()
         i = 0
         for day in self.grid.get_children():
+            if isinstance(day, Gtk.Label):
+                continue
             if not i == 7:
                 i = i + 1
-                pass
+                continue
             i = 0
             allocation = day.get_allocation()
             coordinates = day.translate_coordinates(scroller, 0, 0)
@@ -186,9 +191,12 @@ class MyWindow (Gtk.Window):
 
     def date_click (self, calendar_day, event):
         print calendar_day.date
+        print calendar_day.date.strftime('%W')
 
     def set_month (self):
         for day in self.grid.get_children():
+            if not isinstance(day, CalendarDay):
+                continue
             day.draw(self.current_date)
         self.label.set_text(self.current_date.strftime('%B %Y'))
         self.show_all()
