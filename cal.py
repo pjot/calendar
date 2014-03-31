@@ -2,7 +2,22 @@
 
 from gi.repository import Gtk, Gio, Gdk
 from datetime import date, timedelta
-from dateutil.relativedelta import relativedelta
+
+class Month ():
+    def __init__ (self, year, month):
+        self.year = int(year)
+        self.month = int(month)
+        my_date = date(self.year, self.month, 1)
+        self.name = my_date.strftime('%B')
+
+    def __str__ (self):
+        return str(self.year) + ' ' + self.name
+
+    def matches (self, day):
+        if isinstance(day, CalendarDay):
+            return self.year == day.date.year and self.month == day.date.month
+        if isinstance(day, Month):
+            return self.year == day.year and self.month == day.month
 
 class EventEditor ():
     def __init__ (self, date):
@@ -79,12 +94,15 @@ class CalendarDay (Gtk.EventBox):
         self.label.modify_bg(Gtk.StateType.NORMAL, None)
         self.label.set_text('')
 
-    def draw (self, current_date):
+    def __eq__ (self, other):
+        return self.date.year == other.date.year and self.date.month == other.date.month and self.date.day == other.date.day
+
+    def draw (self, current_month):
         self.label.set_text(self.date.strftime('%d'))
         if self.date == date.today(): 
             self.set_bg(150, 200, 150)
             return
-        if self.date.month == current_date.month and self.date.year == current_date.year:
+        if current_month.matches(self):
             if self.date.weekday() in [5, 6]:
                 self.set_bg(150, 150, 150)
             else:
@@ -129,7 +147,7 @@ class MyWindow (Gtk.Window):
         # Initial filler
         box.pack_start(Gtk.Label(), True, True, 10)
 
-        # Month - Year label
+        # Year label
         self.label = Gtk.Label()
         self.label.set_text('')
         self.label.set_margin_left(10)
@@ -137,14 +155,28 @@ class MyWindow (Gtk.Window):
         self.label.set_width_chars(15)
         box.pack_start(self.label, False, False, 10)
 
+        # Month dropdown
+        month_store = Gtk.ListStore(int, str)
+        for i in range(1, 12):
+            month_date = date(2010, i, 1)
+            month_store.append([i, month_date.strftime('%B')])
+        self.month_dropdown = Gtk.ComboBox.new_with_model(month_store)
+        renderer_text = Gtk.CellRendererText()
+        self.month_dropdown.pack_start(renderer_text, True)
+        # Render the text, but use the number as id
+        self.month_dropdown.add_attribute(renderer_text, "text", 1)
+        self.month_dropdown.connect("changed", self.month_changed)
+        self.month_dropdown.set_property('has-frame', False)
+        box.pack_start(self.month_dropdown, False, False, 10)
+
         # End filler
         box.pack_start(Gtk.Label(), True, True, 10)
 
         self.app_container.pack_start(box, False, True, 10)
 
-        scroller = Gtk.ScrolledWindow()
-        scroller.set_min_content_height(40)
-        scroller.connect('scroll-event', self.scrolling)
+        self.scroller = Gtk.ScrolledWindow()
+        self.scroller.set_min_content_height(40)
+        self.scroller.connect('scroll-event', self.scrolling)
 
         # Calendar days
         self.grid = Gtk.Grid()
@@ -152,7 +184,7 @@ class MyWindow (Gtk.Window):
         self.grid.set_column_spacing(5)
         self.grid.set_column_homogeneous(True)
         self.grid.set_row_homogeneous(True)
-        scroller.add(self.grid)
+        self.scroller.add(self.grid)
 
         # Day names labels
         days_grid = Gtk.Grid()
@@ -161,7 +193,7 @@ class MyWindow (Gtk.Window):
         days_grid.set_column_homogeneous(True)
 
         self.app_container.pack_start(days_grid, False, True, 10)
-        self.app_container.pack_start(scroller, True, True, 10)
+        self.app_container.pack_start(self.scroller, True, True, 10)
 
         self.add(self.app_container)
 
@@ -202,14 +234,39 @@ class MyWindow (Gtk.Window):
                 x = x + 1
 
         # Initialize with today
-        self.current_date = date.today()
+        current_date = date.today()
+        self.current_month = Month(current_date.year, current_date.month)
         self.set_month()
         # Trigger the redraw
-        self.scrolling(scroller)
+        self.scrolling()
 
-    def scrolling (self, scroller, *args):
+    def month_changed (self, combo):
+        if combo.prevent_default:
+            return
+        iterator = combo.get_active_iter()
+        model = combo.get_model()
+        # 0 is the id, 1 is the name
+        month = model[iterator][0]
+        self.scroll_to(date(self.current_month.year, month, 1))
+
+    def scroll_to (self, date):
+        parent_height = self.scroller.get_allocation().height
+        # Search for the date
+        for day in self.grid.get_children():
+            if isinstance(day, Gtk.Label):
+                continue
+            if day.date == date:
+                # Scroll the window
+                day_top = day.get_allocation().y - parent_height / 20
+                adjustment = self.scroller.get_vadjustment()
+                adjustment.set_value(day_top)
+                # Render the current month
+                self.scrolling()
+                return
+
+    def scrolling (self, *args):
         days = {}
-        parent_allocation = scroller.get_allocation()
+        parent_allocation = self.scroller.get_allocation()
         i = 0
         for day in self.grid.get_children():
             # Ignore week number labels
@@ -222,7 +279,7 @@ class MyWindow (Gtk.Window):
             i = 0
             # Get coordinates for this day relative to the scroll window
             allocation = day.get_allocation()
-            coordinates = day.translate_coordinates(scroller, 0, 0)
+            coordinates = day.translate_coordinates(self.scroller, 0, 0)
             day_top = coordinates[1]
             if 0 < day_top + allocation.height and day_top < parent_allocation.height:
                 # Day is visible
@@ -244,22 +301,26 @@ class MyWindow (Gtk.Window):
                 year = divided[0]
                 month = divided[1]
 
-        new_date = date(int(year), int(month), self.current_date.day)
+        new_month = Month(year, month)
         # Only redraw if the current date has changed
-        if not self.current_date == new_date:
-            self.current_date = new_date
+        if not self.current_month.matches(new_month):
+            self.current_month = new_month
             self.set_month()
 
     def date_click (self, calendar_day, event):
-        win = EventEditor(calendar_day.date)
+        self.scroll_to(calendar_day.date)
+#        win = EventEditor(calendar_day.date)
 
     def set_month (self):
         for day in self.grid.get_children():
             # Ignore week numbers
             if not isinstance(day, CalendarDay):
                 continue
-            day.draw(self.current_date)
-        self.label.set_text(self.current_date.strftime('%B %Y'))
+            day.draw(self.current_month)
+        self.label.set_text(str(self.current_month.year))
+        self.month_dropdown.prevent_default = True
+        self.month_dropdown.set_active(self.current_month.month - 1)
+        self.month_dropdown.prevent_default = False
         self.show_all()
 
 win = MyWindow()
