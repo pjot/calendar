@@ -82,7 +82,7 @@ class EventEditor ():
         event.datetime = datetime.strptime(self.date_entry.get_text(), '%Y-%m-%d').date()
         event.save()
         calendar_day = self.parent.get_calendar_day(event.datetime)
-        calendar_day.events.append(event)
+        calendar_day.events.add(event)
         calendar_day.refresh_events()
         self.parent.set_month()
         self.window.destroy()
@@ -96,9 +96,9 @@ class CalendarDay (Gtk.EventBox):
         Gtk.EventBox.__init__(self)
         self.date = date
 
-        self.events = []
+        self.events = set()
         for event in Event.get_by_day(date.year, date.month, date.day):
-            self.events.append(event)
+            self.events.add(event)
 
         self.main_box = Gtk.Box(orientation = Gtk.Orientation.VERTICAL)
         self.box = Gtk.Box(orientation = Gtk.Orientation.HORIZONTAL)
