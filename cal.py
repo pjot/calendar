@@ -1,7 +1,8 @@
 #!/usr/bin/python
 
 from gi.repository import Gtk, Gio, Gdk
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
+import sqlite3
 
 class Month ():
     def __init__ (self, year, month):
@@ -20,11 +21,12 @@ class Month ():
             return self.year == day.year and self.month == day.month
 
 class EventEditor ():
-    def __init__ (self, date):
+    def __init__ (self, date, parent):
         self.date = date
+        self.parent = parent
 
         self.window = Gtk.Window()
-        app_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        app_container = Gtk.Box(orientation = Gtk.Orientation.VERTICAL)
 
         # Form grid
         grid = Gtk.Grid()
@@ -33,19 +35,20 @@ class EventEditor ():
 
         # Name field
         grid.attach(Gtk.Label('Name', xalign = 1), 0, 0, 1, 1)
-        name_entry = Gtk.Entry()
-        name_entry.set_text('Name')
-        grid.attach(name_entry, 1, 0, 1, 1)
+        self.name_entry = Gtk.Entry()
+        self.name_entry.set_text('Name')
+        grid.attach(self.name_entry, 1, 0, 1, 1)
 
         # Date field
         grid.attach(Gtk.Label('Date', xalign = 1), 0, 1, 1, 1)
-        date_entry = Gtk.Entry()
-        date_entry.set_text(date.strftime('%Y-%m-%d'))
-        grid.attach(date_entry, 1, 1, 1, 1)
+        self.date_entry = Gtk.Entry()
+        self.date_entry.set_text(date.strftime('%Y-%m-%d'))
+        grid.attach(self.date_entry, 1, 1, 1, 1)
 
         # Location field
         grid.attach(Gtk.Label('Location', xalign = 1), 0, 2, 1, 1)
-        grid.attach(Gtk.Entry(), 1, 2, 1, 1)
+        self.location_entry = Gtk.Entry()
+        grid.attach(self.location_entry, 1, 2, 1, 1)
 
         # Button box
         buttons = Gtk.Box(orientation = Gtk.Orientation.HORIZONTAL)
@@ -73,7 +76,16 @@ class EventEditor ():
         self.window.show_all()
 
     def save (self, *args):
-        pass
+        event = Event()
+        event.name = self.name_entry.get_text()
+        event.location = self.location_entry.get_text()
+        event.datetime = datetime.strptime(self.date_entry.get_text(), '%Y-%m-%d').date()
+        event.save()
+        calendar_day = self.parent.get_calendar_day(event.datetime)
+        calendar_day.events.append(event)
+        calendar_day.refresh_events()
+        self.parent.set_month()
+        self.window.destroy()
 
     def close (self, *args):
         self.window.destroy()
@@ -83,16 +95,36 @@ class CalendarDay (Gtk.EventBox):
     def __init__ (self, date):
         Gtk.EventBox.__init__(self)
         self.date = date
+
+        self.events = []
+        for event in Event.get_by_day(date.year, date.month, date.day):
+            self.events.append(event)
+
+        self.main_box = Gtk.Box(orientation = Gtk.Orientation.VERTICAL)
+        self.box = Gtk.Box(orientation = Gtk.Orientation.HORIZONTAL)
         self.label = Gtk.Label()
+        self.main_box.add(self.label)
+        self.main_box.add(self.box)
         # Days should be at least 80
         self.set_size_request(-1, 80)
-        self.add(self.label)
+#        self.add(self.label)
+        self.add(self.main_box)
+        self.set_hexpand(True)
+        self.set_vexpand(True)
         # Add some padding to the date string in the boxes
         self.label.set_alignment(0.1, 0.1)
-        self.label.set_hexpand(True)
-        self.label.set_vexpand(True)
         self.label.modify_bg(Gtk.StateType.NORMAL, None)
         self.label.set_text('')
+        self.refresh_events()
+
+    def refresh_events (self):
+        for widget in self.box.get_children():
+            widget.destroy()
+        for e in self.events:
+            area = Gtk.DrawingArea()
+            area.set_size_request(15, 15)
+            area.modify_bg(Gtk.StateType.NORMAL, Gdk.Color.from_floats(0.2, 0.5, 0.2))
+            self.box.pack_start(area, False, False, 5)
 
     def __eq__ (self, other):
         return self.date.year == other.date.year and self.date.month == other.date.month and self.date.day == other.date.day
@@ -124,11 +156,100 @@ class CalendarDay (Gtk.EventBox):
         self.label.set_text(date.strftime('%d'))
 
     def set_bg (self, r, g, b):
-        self.label.modify_bg(Gtk.StateType.NORMAL, Gdk.Color.from_floats(r / float(256), g / float(256), b / float(256)))
+        self.modify_bg(Gtk.StateType.NORMAL, Gdk.Color.from_floats(r / float(256), g / float(256), b / float(256)))
+
+class Event:
+    is_connected = False
+    connection = None
+
+    def __init__ (self):
+        self.is_saved = False
+
+    def echo (self):
+        print 'Event:'
+        print 'ID:', self.id
+        print 'Name:', self.name
+        print 'Location:', self.location
+        print 'Year:', self.year
+        print 'Month:', self.month
+        print 'Day:', self.day
+
+    @staticmethod
+    def get_by_id (id):
+        connection = Event.get_connection()
+        cursor = connection.cursor()
+        cursor.execute('select name, location, year, month, day from events where id = ?', (str(id)))
+        row = cursor.fetchone()
+        event = Event()
+        event.id = id
+        event.name = row[0]
+        event.location = row[1]
+        event.year = row[2]
+        event.month = row[3]
+        event.day = row[4]
+        event.is_saved = True
+        return event
+
+    @staticmethod
+    def get_all ():
+        connection = Event.get_connection()
+        cursor = connection.cursor()
+        cursor.execute('select id from events')
+        rows = cursor.fetchall()
+        objects = []
+        for row in rows:
+            objects.append(Event.get_by_id(row[0]))
+        return objects
+
+    @staticmethod
+    def get_by_day (year, month, day):
+        connection = Event.get_connection()
+        cursor = connection.cursor()
+        cursor.execute('select id from events where year = ? and month = ? and day = ?', (year, month, day))
+        rows = cursor.fetchall()
+        objects = []
+        for row in rows:
+            objects.append(Event.get_by_id(row[0]))
+        return objects
+
+
+    @staticmethod
+    def connect ():
+        Event.connection = sqlite3.connect('test.db')
+        Event.is_connected = True
+        Event.connection.cursor().execute('create table if not exists events (id integer primary key, name text, datetime datetime, location text, year int, month int, day int)')
+
+    @staticmethod
+    def get_connection ():
+        if not Event.is_connected:
+            Event.connect()
+        return Event.connection
+
+    def create (self):
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        cursor.execute('insert into events (name, location, year, month, day) values (?, ?, ?, ?, ?)', (self.name, self.location, self.datetime.strftime('%Y'), self.datetime.strftime('%m'), self.datetime.strftime('%d')))
+        connection.commit()
+        self.id = cursor.lastrowid
+
+    def update (self):
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        cursor.execute('update events set name = ?, year = ?, month = ?, day = ?, location = ? where id = ?', (self.name, self.datetime.strftime('%Y'), self.datetime.strftime('%m'), self.datetime.strftime('%d'), self.location, self.id))
+        connection.commit()
+
+    def save (self):
+        if self.is_saved:
+            self.update()
+        else:
+            self.create()
 
 
 class MyWindow (Gtk.Window):
     days = ['Week', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+    START_YEAR = 2013
+    END_YEAR = 2016
 
     def dummy (self, *args):
         pass
@@ -144,16 +265,17 @@ class MyWindow (Gtk.Window):
         # Toolbar
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
 
-        # Initial filler
-        box.pack_start(Gtk.Label(), True, True, 10)
-
         # Year label
-        self.label = Gtk.Label()
-        self.label.set_text('')
-        self.label.set_margin_left(10)
-        self.label.set_margin_right(10)
-        self.label.set_width_chars(15)
-        box.pack_start(self.label, False, False, 10)
+        year_store = Gtk.ListStore(int, str)
+        for year in range(self.START_YEAR, self.END_YEAR):
+            year_store.append([year, str(year)])
+        self.year_dropdown = Gtk.ComboBox.new_with_model(year_store)
+        renderer_text = Gtk.CellRendererText()
+        self.year_dropdown.pack_start(renderer_text, True)
+        self.year_dropdown.add_attribute(renderer_text, 'text', 1)
+        self.year_dropdown.connect('changed', self.year_changed)
+        self.year_dropdown.set_property('has-frame', False)
+        box.pack_start(self.year_dropdown, False, False, 0)
 
         # Month dropdown
         month_store = Gtk.ListStore(int, str)
@@ -169,8 +291,30 @@ class MyWindow (Gtk.Window):
         self.month_dropdown.set_property('has-frame', False)
         box.pack_start(self.month_dropdown, False, False, 10)
 
-        # End filler
+        # Filler
         box.pack_start(Gtk.Label(), True, True, 10)
+
+        # View buttons
+        stack = Gtk.Stack()
+        stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
+        stack.set_transition_duration(1000)
+
+        button = Gtk.Button('Day')
+        button.connect('clicked', self.view_day)
+        stack.add_titled(button, 'day', 'Day')
+
+        button = Gtk.Button('Week')
+        button.connect('clicked', self.view_day)
+        stack.add_titled(button, 'week', 'Week')
+
+        button = Gtk.Button('Flex')
+        button.connect('clicked', self.view_day)
+        stack.add_titled(button, 'flex', 'Flex')
+
+        stack_switcher = Gtk.StackSwitcher()
+        stack_switcher.set_stack(stack)
+
+        box.pack_start(stack_switcher, False, False, 0)
 
         self.app_container.pack_start(box, False, True, 10)
 
@@ -220,7 +364,10 @@ class MyWindow (Gtk.Window):
             if x == 6:
                 # Add the week number
                 week = int(start_date.strftime('%W')) + 1
-                self.grid.attach(Gtk.Label(str(week)), 0, y, 1, 1)
+                label = Gtk.Label(str(week))
+                label.set_vexpand(False)
+                label.set_hexpand(False)
+                self.grid.attach(label, 0, y, 1, 1)
             calendar_day.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
             calendar_day.connect('button-press-event', self.date_click)
             self.grid.attach(calendar_day, x + 1, y, 1, 1)
@@ -240,8 +387,19 @@ class MyWindow (Gtk.Window):
         # Trigger the redraw
         self.scrolling()
 
+        events = Event.get_all()
+        for event in events:
+            event.echo()
+
+
+    def view_day (self, *args):
+        pass
+
+    def year_changed (self, combo):
+        pass
+
     def month_changed (self, combo):
-        if combo.prevent_default:
+        if self.prevent_default:
             return
         iterator = combo.get_active_iter()
         model = combo.get_model()
@@ -263,6 +421,13 @@ class MyWindow (Gtk.Window):
                 # Render the current month
                 self.scrolling()
                 return
+
+    def get_calendar_day (self, date):
+        for day in self.grid.get_children():
+            if isinstance(day, Gtk.Label):
+                continue
+            if day.date == date:
+                return day
 
     def scrolling (self, *args):
         days = {}
@@ -308,8 +473,7 @@ class MyWindow (Gtk.Window):
             self.set_month()
 
     def date_click (self, calendar_day, event):
-        self.scroll_to(calendar_day.date)
-#        win = EventEditor(calendar_day.date)
+        win = EventEditor(calendar_day.date, self)
 
     def set_month (self):
         for day in self.grid.get_children():
@@ -317,10 +481,12 @@ class MyWindow (Gtk.Window):
             if not isinstance(day, CalendarDay):
                 continue
             day.draw(self.current_month)
-        self.label.set_text(str(self.current_month.year))
-        self.month_dropdown.prevent_default = True
+
+        self.prevent_default = True
+        self.year_dropdown.set_active(self.current_month.year - self.START_YEAR)
         self.month_dropdown.set_active(self.current_month.month - 1)
-        self.month_dropdown.prevent_default = False
+        self.prevent_default = False
+
         self.show_all()
 
 win = MyWindow()
