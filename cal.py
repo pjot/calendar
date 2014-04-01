@@ -6,15 +6,30 @@ import sqlite3
 
 class Month ():
     def __init__ (self, year, month):
+        '''
+        Creates a Month object which represent a month of a year
+
+        :param year: Year
+        :type year: int|str
+
+        :param month: Month
+        :type month: int|str
+        '''
         self.year = int(year)
         self.month = int(month)
         my_date = date(self.year, self.month, 1)
         self.name = my_date.strftime('%B')
 
-    def __str__ (self):
-        return str(self.year) + ' ' + self.name
-
     def matches (self, day):
+        '''
+        Checks if a day matches this month
+
+        :param day: Day
+        :type day: CalendarDay|Month
+
+        :returns: True if the day matches
+        :rtype: bool
+        '''
         if isinstance(day, CalendarDay):
             return self.year == day.date.year and self.month == day.date.month
         if isinstance(day, Month):
@@ -22,6 +37,15 @@ class Month ():
 
 class EventEditor ():
     def __init__ (self, date, parent):
+        '''
+        Creates an Event edit window
+
+        :param date: Default date
+        :type date: date
+
+        :param parent: Parent application
+        :type parent: MyWindow
+        '''
         self.date = date
         self.parent = parent
 
@@ -76,6 +100,9 @@ class EventEditor ():
         self.window.show_all()
 
     def save (self, *args):
+        '''
+        Saves the event and closes the window
+        '''
         event = Event()
         event.name = self.name_entry.get_text()
         event.location = self.location_entry.get_text()
@@ -88,6 +115,9 @@ class EventEditor ():
         self.window.destroy()
 
     def close (self, *args):
+        '''
+        Closes the window
+        '''
         self.window.destroy()
 
 class CalendarDay (Gtk.EventBox):
