@@ -114,7 +114,7 @@ class EventEditor:
         calendar_day = self.parent.get_calendar_day(event.datetime)
         calendar_day.events.add(event)
         calendar_day.refresh_events()
-        self.parent.set_month()
+        self.parent.update_gui()
         self.window.destroy()
 
     def close(self, *args):
@@ -125,6 +125,15 @@ class EventEditor:
 
 
 class CalendarDay(Gtk.EventBox):
+
+    #                r    g    b
+    EVEN_DAY     = (220, 220, 220)
+    EVEN_WEEKEND = (200, 200, 200)
+    ODD_DAY      = (170, 170, 170)
+    ODD_WEEKEND  = (150, 150, 150)
+    TODAY        = (150, 200, 150)
+
+    ODD = (1, 3, 5, 7, 9, 11)
 
     def __init__(self, date):
         '''
@@ -195,35 +204,29 @@ class CalendarDay(Gtk.EventBox):
         self.label.set_text(self.date.strftime('%d'))
         if self.date == date.today():
             # Day is today
-            self.set_bg(150, 200, 150)
+            self.set_bg(self.TODAY)
             return
-        if current_month.matches(self):
+        if self.date.month in self.ODD:
             if self.date.weekday() in [5, 6]:
-                # Day is active weekend
-                self.set_bg(150, 150, 150)
+                self.set_bg(self.ODD_WEEKEND)
             else:
-                # Day is active
-                self.set_bg(170, 170, 170)
+                self.set_bg(self.ODD_DAY)
         else:
-            # Regular day
-            self.set_bg(220, 220, 220)
+            if self.date.weekday() in [5, 6]:
+                self.set_bg(self.EVEN_WEEKEND)
+            else:
+                self.set_bg(self.EVEN_DAY)
 
-    def set_bg(self, r, g, b):
+    def set_bg(self, color):
         '''
         Set the background of the box. Accepts ints between 0 and 256.
 
-        :param r: Red
-        :type r: int
-
-        :param g: Green
-        :type g: int
-
-        :param b: Blue
-        :type b: int
+        :param color: Color tuple (red, green, blue)
+        :type color: tuple
         '''
-        red = r / float(256)
-        green = g / float(256)
-        blue = b / float(256)
+        red = color[0] / float(256)
+        green = color[1] / float(256)
+        blue = color[2] / float(256)
         color = Gdk.Color.from_floats(red, green, blue)
         self.modify_bg(Gtk.StateType.NORMAL, color)
 
@@ -413,8 +416,8 @@ class Event:
 class MyWindow(Gtk.Window):
     days = ['Week', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-    START_YEAR = 2013
-    END_YEAR = 2016
+    START_YEAR = 2014
+    END_YEAR = 2018
 
     def __init__(self):
         '''
@@ -438,13 +441,13 @@ class MyWindow(Gtk.Window):
         renderer_text = Gtk.CellRendererText()
         self.year_dropdown.pack_start(renderer_text, True)
         self.year_dropdown.add_attribute(renderer_text, 'text', 1)
-        self.year_dropdown.connect('changed', self.year_changed)
+        self.year_dropdown.connect('changed', self._year_changed)
         self.year_dropdown.set_property('has-frame', False)
         box.pack_start(self.year_dropdown, False, False, 0)
 
         # Month dropdown
         month_store = Gtk.ListStore(int, str)
-        for i in range(1, 12):
+        for i in range(1, 13):
             month_date = date(2010, i, 1)
             month_store.append([i, month_date.strftime('%B')])
         self.month_dropdown = Gtk.ComboBox.new_with_model(month_store)
@@ -455,6 +458,11 @@ class MyWindow(Gtk.Window):
         self.month_dropdown.connect("changed", self._month_changed)
         self.month_dropdown.set_property('has-frame', False)
         box.pack_start(self.month_dropdown, False, False, 10)
+
+        # Today button
+        button = Gtk.Button('Today')
+        button.connect('clicked', self._goto_today)
+        box.pack_start(button, False, False, 0)
 
         # Filler
         box.pack_start(Gtk.Label(), True, True, 10)
@@ -515,9 +523,9 @@ class MyWindow(Gtk.Window):
             days_grid.attach(label, x + 1, 0, 1, 1)
 
         # Add calendar days
-        start_date = date(2014, 1, 1)
+        start_date = date(self.START_YEAR, 1, 1)
         day = timedelta(1)
-        end_date = date(2015, 1, 1)
+        end_date = date(self.END_YEAR, 1, 1)
         x = 0
         y = 0
         while not start_date.weekday() == 0:
@@ -548,19 +556,27 @@ class MyWindow(Gtk.Window):
         # Initialize with today
         current_date = date.today()
         self.current_month = Month(current_date.year, current_date.month)
-        self.set_month()
-        # Trigger the redraw
-        self._scrolling()
-
-        events = Event.get_all()
-        for event in events:
-            event.echo()
+        self.draw()
+        self.update_gui()
+        self._goto_today()
 
     def view_day(self, *args):
         pass
 
-    def year_changed(self, combo):
-        pass
+    def _year_changed(self, combo):
+        '''
+        When the year is changed we should scroll to the new year
+
+        :param combo: The year dropdown
+        :type combo: Gtk.ComboBox
+        '''
+        if self.prevent_default:
+            return
+        iterator = combo.get_active_iter()
+        model = combo.get_model()
+        # 0 is the id, 1 is the name
+        year = model[iterator][0]
+        self.scroll_to(date(year, self.current_month.month, 1))
 
     def _month_changed(self, combo):
         '''
@@ -576,6 +592,9 @@ class MyWindow(Gtk.Window):
         # 0 is the id, 1 is the name
         month = model[iterator][0]
         self.scroll_to(date(self.current_month.year, month, 1))
+
+    def _goto_today(self, *args):
+        self.scroll_to(date.today())
 
     def scroll_to(self, date):
         '''
@@ -660,7 +679,7 @@ class MyWindow(Gtk.Window):
         # Only redraw if the current date has changed
         if not self.current_month.matches(new_month):
             self.current_month = new_month
-            self.set_month()
+            self.update_gui()
 
     def date_click(self, calendar_day, *args):
         '''
@@ -671,16 +690,17 @@ class MyWindow(Gtk.Window):
         '''
         EventEditor(calendar_day.date, self)
 
-    def set_month(self):
-        '''
-        Updates the GUI using the current active month
-        '''
+    def draw(self):
         for day in self.grid.get_children():
             # Ignore week numbers
             if not isinstance(day, CalendarDay):
                 continue
             day.draw(self.current_month)
 
+    def update_gui(self):
+        '''
+        Updates the GUI using the current active month
+        '''
         self.prevent_default = True
         active_year = self.current_month.year - self.START_YEAR
         self.year_dropdown.set_active(active_year)
@@ -691,5 +711,4 @@ class MyWindow(Gtk.Window):
 
 win = MyWindow()
 win.connect("delete-event", Gtk.main_quit)
-win.show_all()
 Gtk.main()
