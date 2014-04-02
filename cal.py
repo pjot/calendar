@@ -414,7 +414,7 @@ class Event:
 
 
 class MyWindow(Gtk.Window):
-    days = ['Week', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    days = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')
 
     START_YEAR = 2014
     END_YEAR = 2018
@@ -508,16 +508,17 @@ class MyWindow(Gtk.Window):
         days_grid.set_column_spacing(5)
         days_grid.set_row_spacing(0)
         days_grid.set_column_homogeneous(True)
+        days_grid.set_margin_right(15)
 
-        self.app_container.pack_start(days_grid, False, True, 10)
+        self.app_container.pack_start(days_grid, False, True, 5)
         self.app_container.pack_start(self.scroller, True, True, 10)
 
         self.add(self.app_container)
 
         # Add days labels
-        for x in range(0, 8):
+        for x, day in enumerate(self.days):
             label = Gtk.Label()
-            label.set_text(self.days[x])
+            label.set_text(day)
             label.set_vexpand(False)
             label.set_hexpand(False)
             days_grid.attach(label, x + 1, 0, 1, 1)
@@ -534,16 +535,9 @@ class MyWindow(Gtk.Window):
         # Loop until we reach the end date
         while start_date < end_date:
             calendar_day = CalendarDay(start_date)
-            if x == 6:
-                # Add the week number
-                week = int(start_date.strftime('%W')) + 1
-                label = Gtk.Label(str(week))
-                label.set_vexpand(False)
-                label.set_hexpand(False)
-                self.grid.attach(label, 0, y, 1, 1)
             calendar_day.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
             calendar_day.connect('button-press-event', self.date_click)
-            self.grid.attach(calendar_day, x + 1, y, 1, 1)
+            self.grid.attach(calendar_day, x, y, 1, 1)
             # Iterate!
             start_date = start_date + day
             # Keep track of the coordinates in the grid
@@ -640,9 +634,6 @@ class MyWindow(Gtk.Window):
         parent_allocation = self.scroller.get_allocation()
         i = 0
         for day in self.grid.get_children():
-            # Ignore week number labels
-            if isinstance(day, Gtk.Label):
-                continue
             # One day per month is enough, speeds up calculation
             if not i == 7:
                 i = i + 1
@@ -692,9 +683,6 @@ class MyWindow(Gtk.Window):
 
     def draw(self):
         for day in self.grid.get_children():
-            # Ignore week numbers
-            if not isinstance(day, CalendarDay):
-                continue
             day.draw(self.current_month)
 
     def update_gui(self):
