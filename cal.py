@@ -1,11 +1,12 @@
 #!/usr/bin/python
 
-from gi.repository import Gtk, Gio, Gdk
+from gi.repository import Gtk, Gdk
 from datetime import date, timedelta, datetime
 import sqlite3
 
-class Month ():
-    def __init__ (self, year, month):
+
+class Month:
+    def __init__(self, year, month):
         '''
         Creates a Month object which represent a month of a year
 
@@ -20,7 +21,7 @@ class Month ():
         my_date = date(self.year, self.month, 1)
         self.name = my_date.strftime('%B')
 
-    def matches (self, day):
+    def matches(self, day):
         '''
         Checks if a day matches this month
 
@@ -35,8 +36,9 @@ class Month ():
         if isinstance(day, Month):
             return self.year == day.year and self.month == day.month
 
-class EventEditor ():
-    def __init__ (self, date, parent):
+
+class EventEditor:
+    def __init__(self, date, parent):
         '''
         Creates an Event edit window
 
@@ -50,7 +52,7 @@ class EventEditor ():
         self.parent = parent
 
         self.window = Gtk.Window()
-        app_container = Gtk.Box(orientation = Gtk.Orientation.VERTICAL)
+        app_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
         # Form grid
         grid = Gtk.Grid()
@@ -58,24 +60,24 @@ class EventEditor ():
         grid.set_column_spacing(5)
 
         # Name field
-        grid.attach(Gtk.Label('Name', xalign = 1), 0, 0, 1, 1)
+        grid.attach(Gtk.Label('Name', xalign=1), 0, 0, 1, 1)
         self.name_entry = Gtk.Entry()
         self.name_entry.set_text('Name')
         grid.attach(self.name_entry, 1, 0, 1, 1)
 
         # Date field
-        grid.attach(Gtk.Label('Date', xalign = 1), 0, 1, 1, 1)
+        grid.attach(Gtk.Label('Date', xalign=1), 0, 1, 1, 1)
         self.date_entry = Gtk.Entry()
         self.date_entry.set_text(date.strftime('%Y-%m-%d'))
         grid.attach(self.date_entry, 1, 1, 1, 1)
 
         # Location field
-        grid.attach(Gtk.Label('Location', xalign = 1), 0, 2, 1, 1)
+        grid.attach(Gtk.Label('Location', xalign=1), 0, 2, 1, 1)
         self.location_entry = Gtk.Entry()
         grid.attach(self.location_entry, 1, 2, 1, 1)
 
         # Button box
-        buttons = Gtk.Box(orientation = Gtk.Orientation.HORIZONTAL)
+        buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
 
         # Filler
         buttons.pack_start(Gtk.Label(), True, True, 10)
@@ -99,14 +101,15 @@ class EventEditor ():
 
         self.window.show_all()
 
-    def save (self, *args):
+    def save(self, *args):
         '''
         Saves the event and closes the window
         '''
         event = Event()
         event.name = self.name_entry.get_text()
         event.location = self.location_entry.get_text()
-        event.datetime = datetime.strptime(self.date_entry.get_text(), '%Y-%m-%d').date()
+        date = self.date_entry.get_text()
+        event.datetime = datetime.strptime(date, '%Y-%m-%d').date()
         event.save()
         calendar_day = self.parent.get_calendar_day(event.datetime)
         calendar_day.events.add(event)
@@ -114,15 +117,16 @@ class EventEditor ():
         self.parent.set_month()
         self.window.destroy()
 
-    def close (self, *args):
+    def close(self, *args):
         '''
         Closes the window
         '''
         self.window.destroy()
 
-class CalendarDay (Gtk.EventBox):
 
-    def __init__ (self, date):
+class CalendarDay(Gtk.EventBox):
+
+    def __init__(self, date):
         Gtk.EventBox.__init__(self)
         self.date = date
 
@@ -130,8 +134,8 @@ class CalendarDay (Gtk.EventBox):
         for event in Event.get_by_day(date.year, date.month, date.day):
             self.events.add(event)
 
-        self.main_box = Gtk.Box(orientation = Gtk.Orientation.VERTICAL)
-        self.box = Gtk.Box(orientation = Gtk.Orientation.HORIZONTAL)
+        self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.label = Gtk.Label()
         self.main_box.add(self.label)
         self.main_box.add(self.box)
@@ -147,21 +151,25 @@ class CalendarDay (Gtk.EventBox):
         self.label.set_text('')
         self.refresh_events()
 
-    def refresh_events (self):
+    def refresh_events(self):
         for widget in self.box.get_children():
             widget.destroy()
         for e in self.events:
             area = Gtk.DrawingArea()
             area.set_size_request(15, 15)
-            area.modify_bg(Gtk.StateType.NORMAL, Gdk.Color.from_floats(0.2, 0.5, 0.2))
+            color = Gdk.Color.from_floats(0.2, 0.5, 0.2)
+            area.modify_bg(Gtk.StateType.NORMAL, color)
             self.box.pack_start(area, False, False, 5)
 
-    def __eq__ (self, other):
-        return self.date.year == other.date.year and self.date.month == other.date.month and self.date.day == other.date.day
+    def __eq__(self, other):
+        same_year = self.date.year == other.date.year
+        same_month = self.date.month == other.date.month
+        same_day = self.date.day == other.date.day
+        return same_year and same_month and same_day
 
-    def draw (self, current_month):
+    def draw(self, current_month):
         self.label.set_text(self.date.strftime('%d'))
-        if self.date == date.today(): 
+        if self.date == date.today():
             self.set_bg(150, 200, 150)
             return
         if current_month.matches(self):
@@ -172,7 +180,7 @@ class CalendarDay (Gtk.EventBox):
         else:
             self.set_bg(220, 220, 220)
 
-    def set_date (self, date):
+    def set_date(self, date):
         self.date = date
         if self.date.weekday() in [5, 6]:
             # Weekend
@@ -185,17 +193,22 @@ class CalendarDay (Gtk.EventBox):
             self.set_bg(150, 200, 150)
         self.label.set_text(date.strftime('%d'))
 
-    def set_bg (self, r, g, b):
-        self.modify_bg(Gtk.StateType.NORMAL, Gdk.Color.from_floats(r / float(256), g / float(256), b / float(256)))
+    def set_bg(self, r, g, b):
+        red = r / float(256)
+        green = g / float(256)
+        blue = b / float(256)
+        color = Gdk.Color.from_floats(red, green, blue)
+        self.modify_bg(Gtk.StateType.NORMAL, color)
+
 
 class Event:
     is_connected = False
     connection = None
 
-    def __init__ (self):
+    def __init__(self):
         self.is_saved = False
 
-    def echo (self):
+    def echo(self):
         print 'Event:'
         print 'ID:', self.id
         print 'Name:', self.name
@@ -205,11 +218,19 @@ class Event:
         print 'Day:', self.day
 
     @staticmethod
-    def get_by_id (id):
+    def get_by_id(id):
         connection = Event.get_connection()
         cursor = connection.cursor()
-        cursor.execute('select name, location, year, month, day from events where id = ?', (str(id)))
+        sql = 'select \
+                name, \
+                location, \
+                year, \
+                month, \
+                day \
+            from events where id = ?'
+        cursor.execute(sql, (str(id)))
         row = cursor.fetchone()
+
         event = Event()
         event.id = id
         event.name = row[0]
@@ -221,7 +242,7 @@ class Event:
         return event
 
     @staticmethod
-    def get_all ():
+    def get_all():
         connection = Event.get_connection()
         cursor = connection.cursor()
         cursor.execute('select id from events')
@@ -232,66 +253,99 @@ class Event:
         return objects
 
     @staticmethod
-    def get_by_day (year, month, day):
+    def get_by_day(year, month, day):
         connection = Event.get_connection()
         cursor = connection.cursor()
-        cursor.execute('select id from events where year = ? and month = ? and day = ?', (year, month, day))
+        sql = 'select id from events where year = ? and month = ? and day = ?'
+        cursor.execute(sql, (year, month, day))
         rows = cursor.fetchall()
         objects = []
         for row in rows:
             objects.append(Event.get_by_id(row[0]))
         return objects
 
-
     @staticmethod
-    def connect ():
+    def connect():
         Event.connection = sqlite3.connect('test.db')
         Event.is_connected = True
-        Event.connection.cursor().execute('create table if not exists events (id integer primary key, name text, datetime datetime, location text, year int, month int, day int)')
+        sql = 'create table if not exists \
+            events ( \
+                id integer primary key, \
+                name text, \
+                datetime datetime, \
+                location text, \
+                year int, \
+                month int, \
+                day int \
+            )'
+        Event.connection.cursor().execute(sql)
 
     @staticmethod
-    def get_connection ():
+    def get_connection():
         if not Event.is_connected:
             Event.connect()
         return Event.connection
 
-    def create (self):
+    def create(self):
         connection = self.get_connection()
         cursor = connection.cursor()
-        cursor.execute('insert into events (name, location, year, month, day) values (?, ?, ?, ?, ?)', (self.name, self.location, self.datetime.strftime('%Y'), self.datetime.strftime('%m'), self.datetime.strftime('%d')))
+        sql = 'insert into events \
+                (name, location, year, month, day) \
+                values \
+                (?, ?, ?, ?, ?)'
+        values = (
+            self.name,
+            self.location,
+            self.datetime.strftime('%Y'),
+            self.datetime.strftime('%m'),
+            self.datetime.strftime('%d')
+        )
+        cursor.execute(sql, values)
         connection.commit()
         self.id = cursor.lastrowid
 
-    def update (self):
+    def update(self):
         connection = self.get_connection()
         cursor = connection.cursor()
-        cursor.execute('update events set name = ?, year = ?, month = ?, day = ?, location = ? where id = ?', (self.name, self.datetime.strftime('%Y'), self.datetime.strftime('%m'), self.datetime.strftime('%d'), self.location, self.id))
+        sql = 'update events set \
+                name = ?, \
+                year = ?, \
+                month = ?, \
+                day = ?, \
+                location = ? \
+                where id = ?'
+        values = (
+            self.name,
+            self.datetime.strftime('%Y'),
+            self.datetime.strftime('%m'),
+            self.datetime.strftime('%d'),
+            self.location,
+            self.id
+        )
+        cursor.execute(sql, values)
         connection.commit()
 
-    def save (self):
+    def save(self):
         if self.is_saved:
             self.update()
         else:
             self.create()
 
 
-class MyWindow (Gtk.Window):
+class MyWindow(Gtk.Window):
     days = ['Week', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
     START_YEAR = 2013
     END_YEAR = 2016
 
-    def dummy (self, *args):
-        pass
-
-    def __init__ (self):
+    def __init__(self):
         Gtk.Window.__init__(self)
 
         self.set_border_width(10)
         self.set_default_size(800, 600)
 
         self.app_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-                                                                        
+
         # Toolbar
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
 
@@ -421,14 +475,13 @@ class MyWindow (Gtk.Window):
         for event in events:
             event.echo()
 
-
-    def view_day (self, *args):
+    def view_day(self, *args):
         pass
 
-    def year_changed (self, combo):
+    def year_changed(self, combo):
         pass
 
-    def month_changed (self, combo):
+    def month_changed(self, combo):
         if self.prevent_default:
             return
         iterator = combo.get_active_iter()
@@ -437,7 +490,7 @@ class MyWindow (Gtk.Window):
         month = model[iterator][0]
         self.scroll_to(date(self.current_month.year, month, 1))
 
-    def scroll_to (self, date):
+    def scroll_to(self, date):
         parent_height = self.scroller.get_allocation().height
         # Search for the date
         for day in self.grid.get_children():
@@ -452,14 +505,14 @@ class MyWindow (Gtk.Window):
                 self.scrolling()
                 return
 
-    def get_calendar_day (self, date):
+    def get_calendar_day(self, date):
         for day in self.grid.get_children():
             if isinstance(day, Gtk.Label):
                 continue
             if day.date == date:
                 return day
 
-    def scrolling (self, *args):
+    def scrolling(self, *args):
         days = {}
         parent_allocation = self.scroller.get_allocation()
         i = 0
@@ -476,7 +529,10 @@ class MyWindow (Gtk.Window):
             allocation = day.get_allocation()
             coordinates = day.translate_coordinates(self.scroller, 0, 0)
             day_top = coordinates[1]
-            if 0 < day_top + allocation.height and day_top < parent_allocation.height:
+
+            above = 0 < day_top + allocation.height
+            below = day_top < parent_allocation.height
+            if above and below:
                 # Day is visible
                 year_month = day.date.strftime('%Y-%m')
                 # Add to month count
@@ -502,10 +558,10 @@ class MyWindow (Gtk.Window):
             self.current_month = new_month
             self.set_month()
 
-    def date_click (self, calendar_day, event):
-        win = EventEditor(calendar_day.date, self)
+    def date_click(self, calendar_day, event):
+        EventEditor(calendar_day.date, self)
 
-    def set_month (self):
+    def set_month(self):
         for day in self.grid.get_children():
             # Ignore week numbers
             if not isinstance(day, CalendarDay):
@@ -513,7 +569,8 @@ class MyWindow (Gtk.Window):
             day.draw(self.current_month)
 
         self.prevent_default = True
-        self.year_dropdown.set_active(self.current_month.year - self.START_YEAR)
+        active_year = self.current_month.year - self.START_YEAR
+        self.year_dropdown.set_active(active_year)
         self.month_dropdown.set_active(self.current_month.month - 1)
         self.prevent_default = False
 
