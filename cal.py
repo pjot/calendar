@@ -127,6 +127,12 @@ class EventEditor:
 class CalendarDay(Gtk.EventBox):
 
     def __init__(self, date):
+        '''
+        Creates a CalendarDay object that represents a box in the main view.
+
+        :param date: Date
+        :type date: date
+        '''
         Gtk.EventBox.__init__(self)
         self.date = date
 
@@ -141,7 +147,6 @@ class CalendarDay(Gtk.EventBox):
         self.main_box.add(self.box)
         # Days should be at least 80
         self.set_size_request(-1, 80)
-#        self.add(self.label)
         self.add(self.main_box)
         self.set_hexpand(True)
         self.set_vexpand(True)
@@ -152,8 +157,13 @@ class CalendarDay(Gtk.EventBox):
         self.refresh_events()
 
     def refresh_events(self):
+        '''
+        Refresh the events in the view
+        '''
+        # Remove all widgets
         for widget in self.box.get_children():
             widget.destroy()
+        # Re-add them
         for e in self.events:
             area = Gtk.DrawingArea()
             area.set_size_request(15, 15)
@@ -162,38 +172,55 @@ class CalendarDay(Gtk.EventBox):
             self.box.pack_start(area, False, False, 5)
 
     def __eq__(self, other):
+        '''
+        Enables comparisons with other CalendarDays
+
+        :param other: Other object
+        :type other: CalendarDay
+
+        :returns bool: True if the date matches
+        '''
         same_year = self.date.year == other.date.year
         same_month = self.date.month == other.date.month
         same_day = self.date.day == other.date.day
         return same_year and same_month and same_day
 
     def draw(self, current_month):
+        '''
+        Sets the color based upon the current month in the view
+
+        :param current_month: Current month
+        :type current_month: Month
+        '''
         self.label.set_text(self.date.strftime('%d'))
         if self.date == date.today():
+            # Day is today
             self.set_bg(150, 200, 150)
             return
         if current_month.matches(self):
             if self.date.weekday() in [5, 6]:
+                # Day is active weekend
                 self.set_bg(150, 150, 150)
             else:
+                # Day is active
                 self.set_bg(170, 170, 170)
         else:
+            # Regular day
             self.set_bg(220, 220, 220)
 
-    def set_date(self, date):
-        self.date = date
-        if self.date.weekday() in [5, 6]:
-            # Weekend
-            self.set_bg(150, 150, 150)
-        else:
-            # Regular day
-            self.set_bg(170, 170, 170)
-        if self.date == date.today():
-            # Today
-            self.set_bg(150, 200, 150)
-        self.label.set_text(date.strftime('%d'))
-
     def set_bg(self, r, g, b):
+        '''
+        Set the background of the box. Accepts ints between 0 and 256.
+
+        :param r: Red
+        :type r: int
+
+        :param g: Green
+        :type g: int
+
+        :param b: Blue
+        :type b: int
+        '''
         red = r / float(256)
         green = g / float(256)
         blue = b / float(256)
@@ -206,9 +233,16 @@ class Event:
     connection = None
 
     def __init__(self):
+        '''
+        Creates an Event object. This is a data model used to persist the
+        events in a database as well as fetch them from it.
+        '''
         self.is_saved = False
 
     def echo(self):
+        '''
+        Prints the details of this event. Useful for debugging.
+        '''
         print 'Event:'
         print 'ID:', self.id
         print 'Name:', self.name
@@ -219,6 +253,14 @@ class Event:
 
     @staticmethod
     def get_by_id(id):
+        '''
+        Get one Event by its id
+
+        :param id: ID
+        :type id: int
+
+        :returns Event: The Event
+        '''
         connection = Event.get_connection()
         cursor = connection.cursor()
         sql = 'select \
@@ -243,6 +285,11 @@ class Event:
 
     @staticmethod
     def get_all():
+        '''
+        Get all stored Events
+
+        :returns list[Event]: List of Events
+        '''
         connection = Event.get_connection()
         cursor = connection.cursor()
         cursor.execute('select id from events')
@@ -254,6 +301,20 @@ class Event:
 
     @staticmethod
     def get_by_day(year, month, day):
+        '''
+        Get all events on a certain day.
+
+        :param year: Year
+        :type year: int
+
+        :param month: Month
+        :type month: int
+
+        :param day: Day
+        :type day: int
+
+        :returns list[Event]: List of Events
+        '''
         connection = Event.get_connection()
         cursor = connection.cursor()
         sql = 'select id from events where year = ? and month = ? and day = ?'
@@ -266,6 +327,9 @@ class Event:
 
     @staticmethod
     def connect():
+        '''
+        Connect to the database and create the schema if it does not exist.
+        '''
         Event.connection = sqlite3.connect('test.db')
         Event.is_connected = True
         sql = 'create table if not exists \
@@ -282,11 +346,19 @@ class Event:
 
     @staticmethod
     def get_connection():
+        '''
+        Ensure that we are connected to the database and return the connection
+
+        :returns sqlite3.Connection: Connection
+        '''
         if not Event.is_connected:
             Event.connect()
         return Event.connection
 
-    def create(self):
+    def _create(self):
+        '''
+        Create a new row in the database. Also sets the id of the event
+        '''
         connection = self.get_connection()
         cursor = connection.cursor()
         sql = 'insert into events \
@@ -304,7 +376,10 @@ class Event:
         connection.commit()
         self.id = cursor.lastrowid
 
-    def update(self):
+    def _update(self):
+        '''
+        Update existing row in the database.
+        '''
         connection = self.get_connection()
         cursor = connection.cursor()
         sql = 'update events set \
@@ -326,10 +401,13 @@ class Event:
         connection.commit()
 
     def save(self):
+        '''
+        Persists the Event in the database.
+        '''
         if self.is_saved:
-            self.update()
+            self._update()
         else:
-            self.create()
+            self._create()
 
 
 class MyWindow(Gtk.Window):
@@ -339,6 +417,9 @@ class MyWindow(Gtk.Window):
     END_YEAR = 2016
 
     def __init__(self):
+        '''
+        Creates a new Window and fills it with the interface
+        '''
         Gtk.Window.__init__(self)
 
         self.set_border_width(10)
@@ -371,7 +452,7 @@ class MyWindow(Gtk.Window):
         self.month_dropdown.pack_start(renderer_text, True)
         # Render the text, but use the number as id
         self.month_dropdown.add_attribute(renderer_text, "text", 1)
-        self.month_dropdown.connect("changed", self.month_changed)
+        self.month_dropdown.connect("changed", self._month_changed)
         self.month_dropdown.set_property('has-frame', False)
         box.pack_start(self.month_dropdown, False, False, 10)
 
@@ -404,7 +485,7 @@ class MyWindow(Gtk.Window):
 
         self.scroller = Gtk.ScrolledWindow()
         self.scroller.set_min_content_height(40)
-        self.scroller.connect('scroll-event', self.scrolling)
+        self.scroller.connect('scroll-event', self._scrolling)
 
         # Calendar days
         self.grid = Gtk.Grid()
@@ -469,7 +550,7 @@ class MyWindow(Gtk.Window):
         self.current_month = Month(current_date.year, current_date.month)
         self.set_month()
         # Trigger the redraw
-        self.scrolling()
+        self._scrolling()
 
         events = Event.get_all()
         for event in events:
@@ -481,7 +562,13 @@ class MyWindow(Gtk.Window):
     def year_changed(self, combo):
         pass
 
-    def month_changed(self, combo):
+    def _month_changed(self, combo):
+        '''
+        When the month is changed we should scroll to the new month
+
+        :param combo: The month dropdown
+        :type combo: Gtk.ComboBox
+        '''
         if self.prevent_default:
             return
         iterator = combo.get_active_iter()
@@ -491,6 +578,12 @@ class MyWindow(Gtk.Window):
         self.scroll_to(date(self.current_month.year, month, 1))
 
     def scroll_to(self, date):
+        '''
+        Scrolls to a date by putting it at the top
+
+        :param date: Date
+        :type date: date
+        '''
         parent_height = self.scroller.get_allocation().height
         # Search for the date
         for day in self.grid.get_children():
@@ -502,17 +595,28 @@ class MyWindow(Gtk.Window):
                 adjustment = self.scroller.get_vadjustment()
                 adjustment.set_value(day_top)
                 # Render the current month
-                self.scrolling()
+                self._scrolling()
                 return
 
     def get_calendar_day(self, date):
+        '''
+        Returns the CalendarDay of a date
+
+        :param date: Date
+        :type date: date
+
+        :returns CalendarDay: The CalendarDay
+        '''
         for day in self.grid.get_children():
             if isinstance(day, Gtk.Label):
                 continue
             if day.date == date:
                 return day
 
-    def scrolling(self, *args):
+    def _scrolling(self, *args):
+        '''
+        Calculates the current active month and updates the GUI accordingly
+        '''
         days = {}
         parent_allocation = self.scroller.get_allocation()
         i = 0
@@ -558,10 +662,19 @@ class MyWindow(Gtk.Window):
             self.current_month = new_month
             self.set_month()
 
-    def date_click(self, calendar_day, event):
+    def date_click(self, calendar_day, *args):
+        '''
+        Open an Event edit window for a CalendarDay
+
+        :param calendar_day: The CalendarDay
+        :type calendar_day: CalendarDay
+        '''
         EventEditor(calendar_day.date, self)
 
     def set_month(self):
+        '''
+        Updates the GUI using the current active month
+        '''
         for day in self.grid.get_children():
             # Ignore week numbers
             if not isinstance(day, CalendarDay):
