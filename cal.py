@@ -290,8 +290,7 @@ class Event:
 
         :returns Event: The Event
         '''
-        connection = Event.get_connection()
-        cursor = connection.cursor()
+        cursor = Event.get_connection().cursor()
         sql = 'select \
                 name, \
                 location, \
@@ -306,11 +305,11 @@ class Event:
         event.id = id
         event.name = row[0]
         event.location = row[1]
-        event.year = row[2]
-        event.month = row[3]
-        event.day = row[4]
+        event.year = int(row[2])
+        event.month = int(row[3])
+        event.day = int(row[4])
         event.is_saved = True
-        event.date = date(int(event.year), int(event.month), int(event.day))
+        event.date = date(event.year, event.month, event.day)
         return event
 
     @staticmethod
@@ -320,8 +319,7 @@ class Event:
 
         :returns list[Event]: List of Events
         '''
-        connection = Event.get_connection()
-        cursor = connection.cursor()
+        cursor = Event.get_connection().cursor()
         cursor.execute('select id from events')
         rows = cursor.fetchall()
         objects = []
@@ -345,8 +343,7 @@ class Event:
 
         :returns list[Event]: List of Events
         '''
-        connection = Event.get_connection()
-        cursor = connection.cursor()
+        cursor = Event.get_connection().cursor()
         sql = 'select id from events where year = ? and month = ? and day = ?'
         cursor.execute(sql, (year, month, day))
         rows = cursor.fetchall()
