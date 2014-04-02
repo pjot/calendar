@@ -38,7 +38,7 @@ class Month:
 
 
 class EventEditor:
-    def __init__(self, date, parent):
+    def __init__(self, event, calendar_day):
         '''
         Creates an Event edit window
 
@@ -48,8 +48,9 @@ class EventEditor:
         :param parent: Parent application
         :type parent: MyWindow
         '''
-        self.date = date
-        self.parent = parent
+        self.event = event
+        self.date = event.date
+        self.calendar_day = calendar_day
 
         self.window = Gtk.Window()
         app_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -62,18 +63,19 @@ class EventEditor:
         # Name field
         grid.attach(Gtk.Label('Name', xalign=1), 0, 0, 1, 1)
         self.name_entry = Gtk.Entry()
-        self.name_entry.set_text('Name')
+        self.name_entry.set_text(self.event.name)
         grid.attach(self.name_entry, 1, 0, 1, 1)
 
         # Date field
         grid.attach(Gtk.Label('Date', xalign=1), 0, 1, 1, 1)
         self.date_entry = Gtk.Entry()
-        self.date_entry.set_text(date.strftime('%Y-%m-%d'))
+        self.date_entry.set_text(self.date.strftime('%Y-%m-%d'))
         grid.attach(self.date_entry, 1, 1, 1, 1)
 
         # Location field
         grid.attach(Gtk.Label('Location', xalign=1), 0, 2, 1, 1)
         self.location_entry = Gtk.Entry()
+        self.location_entry.set_text(self.event.location)
         grid.attach(self.location_entry, 1, 2, 1, 1)
 
         # Button box
@@ -105,22 +107,23 @@ class EventEditor:
         '''
         Saves the event and closes the window
         '''
-        event = Event()
+        event = self.event
         event.name = self.name_entry.get_text()
         event.location = self.location_entry.get_text()
         date = self.date_entry.get_text()
-        event.datetime = datetime.strptime(date, '%Y-%m-%d').date()
+        event.date = datetime.strptime(date, '%Y-%m-%d').date()
         event.save()
-        calendar_day = self.parent.get_calendar_day(event.datetime)
-        calendar_day.events.add(event)
-        calendar_day.refresh_events()
-        self.parent.update_gui()
+        self.calendar_day.add_event(event)
+        self.calendar_day.refresh_events()
+        self.calendar_day.is_blocked = False
+        self.calendar_day.parent.update_gui()
         self.window.destroy()
 
     def close(self, *args):
         '''
         Closes the window
         '''
+        self.calendar_day.is_blocked = False
         self.window.destroy()
 
 
@@ -135,7 +138,7 @@ class CalendarDay(Gtk.EventBox):
 
     ODD = (1, 3, 5, 7, 9, 11)
 
-    def __init__(self, date):
+    def __init__(self, date, parent):
         '''
         Creates a CalendarDay object that represents a box in the main view.
 
@@ -144,10 +147,12 @@ class CalendarDay(Gtk.EventBox):
         '''
         Gtk.EventBox.__init__(self)
         self.date = date
+        self.parent = parent
+        self.is_blocked = False
 
         self.events = set()
         for event in Event.get_by_day(date.year, date.month, date.day):
-            self.events.add(event)
+            self.add_event(event)
 
         self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -165,6 +170,12 @@ class CalendarDay(Gtk.EventBox):
         self.label.set_text('')
         self.refresh_events()
 
+    def add_event(self, event):
+        for each in self.events:
+            if each.id == event.id:
+                return
+        self.events.add(event)
+
     def refresh_events(self):
         '''
         Refresh the events in the view
@@ -173,12 +184,19 @@ class CalendarDay(Gtk.EventBox):
         for widget in self.box.get_children():
             widget.destroy()
         # Re-add them
-        for e in self.events:
+        for event in self.events:
             area = Gtk.DrawingArea()
             area.set_size_request(15, 15)
             color = Gdk.Color.from_floats(0.2, 0.5, 0.2)
             area.modify_bg(Gtk.StateType.NORMAL, color)
+            area.event_id = event.id
+            area.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+            area.connect('button-press-event', self._edit_event)
             self.box.pack_start(area, False, False, 5)
+
+    def _edit_event(self, area, *args):
+        self.is_blocked = True
+        EventEditor(Event.get_by_id(area.event_id), self)
 
     def __eq__(self, other):
         '''
@@ -241,6 +259,9 @@ class Event:
         events in a database as well as fetch them from it.
         '''
         self.is_saved = False
+        self.name = ''
+        self.id = ''
+        self.location = ''
 
     def echo(self):
         '''
@@ -284,6 +305,7 @@ class Event:
         event.month = row[3]
         event.day = row[4]
         event.is_saved = True
+        event.date = date(int(event.year), int(event.month), int(event.day))
         return event
 
     @staticmethod
@@ -339,7 +361,6 @@ class Event:
             events ( \
                 id integer primary key, \
                 name text, \
-                datetime datetime, \
                 location text, \
                 year int, \
                 month int, \
@@ -371,9 +392,9 @@ class Event:
         values = (
             self.name,
             self.location,
-            self.datetime.strftime('%Y'),
-            self.datetime.strftime('%m'),
-            self.datetime.strftime('%d')
+            self.date.strftime('%Y'),
+            self.date.strftime('%m'),
+            self.date.strftime('%d')
         )
         cursor.execute(sql, values)
         connection.commit()
@@ -394,9 +415,9 @@ class Event:
                 where id = ?'
         values = (
             self.name,
-            self.datetime.strftime('%Y'),
-            self.datetime.strftime('%m'),
-            self.datetime.strftime('%d'),
+            self.date.strftime('%Y'),
+            self.date.strftime('%m'),
+            self.date.strftime('%d'),
             self.location,
             self.id
         )
@@ -534,7 +555,7 @@ class MyWindow(Gtk.Window):
 
         # Loop until we reach the end date
         while start_date < end_date:
-            calendar_day = CalendarDay(start_date)
+            calendar_day = CalendarDay(start_date, self)
             calendar_day.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
             calendar_day.connect('button-press-event', self.date_click)
             self.grid.attach(calendar_day, x, y, 1, 1)
@@ -679,7 +700,10 @@ class MyWindow(Gtk.Window):
         :param calendar_day: The CalendarDay
         :type calendar_day: CalendarDay
         '''
-        EventEditor(calendar_day.date, self)
+        if not calendar_day.is_blocked:
+            event = Event()
+            event.date = calendar_day.date
+            EventEditor(event, calendar_day)
 
     def draw(self):
         for day in self.grid.get_children():
