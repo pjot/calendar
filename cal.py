@@ -115,6 +115,7 @@ class EventEditor:
         event.save()
         self.calendar_day.add_event(event)
         self.calendar_day.refresh_events()
+        # Give the click event back to the Calendar Day
         self.calendar_day.is_blocked = False
         self.calendar_day.parent.update_gui()
         self.window.destroy()
@@ -155,17 +156,19 @@ class CalendarDay(Gtk.EventBox):
             self.add_event(event)
 
         self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.grid = Gtk.Grid()
+        self.grid.set_row_spacing(5)
+
         self.label = Gtk.Label()
         self.main_box.add(self.label)
-        self.main_box.add(self.box)
+        self.main_box.add(self.grid)
         # Days should be at least 80
         self.set_size_request(-1, 80)
         self.add(self.main_box)
         self.set_hexpand(True)
         self.set_vexpand(True)
         # Add some padding to the date string in the boxes
-        self.label.set_alignment(0.1, 0.1)
+        self.label.set_alignment(0.05, 0.1)
         self.label.modify_bg(Gtk.StateType.NORMAL, None)
         self.label.set_text('')
         self.refresh_events()
@@ -181,18 +184,20 @@ class CalendarDay(Gtk.EventBox):
         Refresh the events in the view
         '''
         # Remove all widgets
-        for widget in self.box.get_children():
+        for widget in self.grid.get_children():
             widget.destroy()
         # Re-add them
-        for event in self.events:
+        for i, event in enumerate(self.events):
             area = Gtk.DrawingArea()
             area.set_size_request(15, 15)
             color = Gdk.Color.from_floats(0.2, 0.5, 0.2)
             area.modify_bg(Gtk.StateType.NORMAL, color)
             area.event_id = event.id
+            area.set_margin_left(5)
             area.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
             area.connect('button-press-event', self._edit_event)
-            self.box.pack_start(area, False, False, 5)
+            self.grid.attach(area, i % 5, i / 5, 1, 1)
+#            self.box.pack_start(area, False, False, 0)
 
     def _edit_event(self, area, *args):
         self.is_blocked = True
@@ -294,7 +299,7 @@ class Event:
                 month, \
                 day \
             from events where id = ?'
-        cursor.execute(sql, (str(id)))
+        cursor.execute(sql, (str(id),))
         row = cursor.fetchone()
 
         event = Event()
