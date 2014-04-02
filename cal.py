@@ -196,8 +196,8 @@ class CalendarDay(Gtk.EventBox):
             area.set_margin_left(5)
             area.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
             area.connect('button-press-event', self._edit_event)
+            # Add 5 events per row
             self.grid.attach(area, i % 5, i / 5, 1, 1)
-#            self.box.pack_start(area, False, False, 0)
 
     def _edit_event(self, area, *args):
         self.is_blocked = True
