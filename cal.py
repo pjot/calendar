@@ -71,11 +71,17 @@ class EventEditor:
         self.date_entry.set_text(self.date.strftime('%Y-%m-%d'))
         grid.attach(self.date_entry, 1, 1, 1, 1)
 
+        # Time field
+        grid.attach(Gtk.Label('Time', xalign=1), 0, 2, 1, 1)
+        self.time_entry = Gtk.Entry()
+        self.time_entry.set_text(self.event.time)
+        grid.attach(self.time_entry, 1, 2, 1, 1)
+
         # Location field
-        grid.attach(Gtk.Label('Location', xalign=1), 0, 2, 1, 1)
+        grid.attach(Gtk.Label('Location', xalign=1), 0, 3, 1, 1)
         self.location_entry = Gtk.Entry()
         self.location_entry.set_text(self.event.location)
-        grid.attach(self.location_entry, 1, 2, 1, 1)
+        grid.attach(self.location_entry, 1, 3, 1, 1)
 
         # Button box
         buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -111,6 +117,10 @@ class EventEditor:
         event.location = self.location_entry.get_text()
         date = self.date_entry.get_text()
         event.date = datetime.strptime(date, '%Y-%m-%d').date()
+        event.time = self.time_entry.get_text()
+        time_parts = event.time.split(':')
+        event.hour = time_parts[0]
+        event.minute = time_parts[1]
         event.save()
         self.calendar_day.add_event(event)
         self.calendar_day.refresh_events()
@@ -141,6 +151,16 @@ class CalendarDisplay(Gtk.EventBox):
         color = Gdk.Color.from_floats(red, green, blue)
         self.modify_bg(Gtk.StateType.NORMAL, color)
 
+    def add_event(self, event):
+        for each in self.events:
+            if each.id == event.id:
+                return
+        self.events.add(event)
+
+    def _edit_event(self, area, *args):
+        self.is_blocked = True
+        EventEditor(Event.get_by_id(area.event_id), self)
+
 
 class CalendarHour(CalendarDisplay):
 
@@ -149,32 +169,63 @@ class CalendarHour(CalendarDisplay):
     OTHER_WEEKEND    = (200, 200, 200)
     BUSINESS_WEEKEND = (150, 150, 150)
 
-    def __init__(self, day, hour):
+    def __init__(self, date, hour, parent):
         CalendarDisplay.__init__(self)
-        self.day = day
+        self.date = date
         self.hour = hour
+        self.parent = parent
 
-        self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.events = set()
+        for event in Event.get_by_hour(date.year, date.month, date.day, hour):
+            self.add_event(event)
+
+        self.main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.label = Gtk.Label()
-        self.label.set_alignment(0.05, 0.1)
-        self.main_box.add(self.label)
+        self.grid = Gtk.Grid()
+        self.label.set_alignment(0.1, 0.1)
+        if self.date.weekday() == 0:
+            self.main_box.add(self.label)
+        self.main_box.add(self.grid)
         self.set_size_request(-1, 40)
         self.add(self.main_box)
         self.set_hexpand(True)
         self.set_vexpand(True)
         self.draw()
+        self.refresh_events()
+
+    def refresh_events(self):
+        '''
+        Refresh the events in the view
+        '''
+        # Remove all widgets
+        for widget in self.grid.get_children():
+            widget.destroy()
+        # Re-add them
+        for i, event in enumerate(self.events):
+            area = Gtk.DrawingArea()
+            area.set_size_request(15, 15)
+            color = Gdk.Color.from_floats(0.2, 0.5, 0.2)
+            area.modify_bg(Gtk.StateType.NORMAL, color)
+            area.event_id = event.id
+            area.set_margin_top(5)
+            area.set_margin_left(5)
+            area.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+            area.connect('button-press-event', self._edit_event)
+            # Add 5 events per row
+            self.grid.attach(area, i % 5, i / 5, 1, 1)
+        self.grid.show_all()
 
     def draw(self):
-        if self.day == 0:
+        if self.date.weekday() == 0:
             self.label.set_text(str(self.hour) + ':00')
 
         if self.hour > 8 and self.hour < 18:
-            if self.day in [5, 6]:
+            if self.date.weekday() in [5, 6]:
                 self.set_bg(self.BUSINESS_WEEKEND)
             else:
                 self.set_bg(self.BUSINESS_DAY)
         else:
-            if self.day in [5, 6]:
+            if self.date.weekday() in [5, 6]:
                 self.set_bg(self.OTHER_WEEKEND)
             else:
                 self.set_bg(self.OTHER_DAY)
@@ -225,12 +276,6 @@ class CalendarDay(CalendarDisplay):
         self.label.set_text('')
         self.refresh_events()
 
-    def add_event(self, event):
-        for each in self.events:
-            if each.id == event.id:
-                return
-        self.events.add(event)
-
     def refresh_events(self):
         '''
         Refresh the events in the view
@@ -251,9 +296,6 @@ class CalendarDay(CalendarDisplay):
             # Add 5 events per row
             self.grid.attach(area, i % 5, i / 5, 1, 1)
 
-    def _edit_event(self, area, *args):
-        self.is_blocked = True
-        EventEditor(Event.get_by_id(area.event_id), self)
 
     def __eq__(self, other):
         '''
@@ -309,6 +351,7 @@ class Event:
         '''
         self.is_saved = False
         self.name = ''
+        self.time = ''
         self.id = ''
         self.location = ''
 
@@ -320,6 +363,8 @@ class Event:
         print 'ID:', self.id
         print 'Name:', self.name
         print 'Location:', self.location
+        print 'Hour:', self.hour
+        print 'Minute:', self.minute
         print 'Year:', self.year
         print 'Month:', self.month
         print 'Day:', self.day
@@ -340,7 +385,9 @@ class Event:
                 location, \
                 year, \
                 month, \
-                day \
+                day, \
+                hour, \
+                minute \
             from events where id = ?'
         cursor.execute(sql, (str(id),))
         row = cursor.fetchone()
@@ -352,8 +399,11 @@ class Event:
         event.year = int(row[2])
         event.month = int(row[3])
         event.day = int(row[4])
+        event.hour = int(row[5])
+        event.minute = int(row[6])
         event.is_saved = True
         event.date = date(event.year, event.month, event.day)
+        event.time = str(event.hour) + ':' + str(event.minute)
         return event
 
     @staticmethod
@@ -365,6 +415,17 @@ class Event:
         '''
         cursor = Event.get_connection().cursor()
         cursor.execute('select id from events')
+        rows = cursor.fetchall()
+        objects = []
+        for row in rows:
+            objects.append(Event.get_by_id(row[0]))
+        return objects
+
+    @staticmethod
+    def get_by_hour(year, month, day, hour):
+        cursor = Event.get_connection().cursor()
+        sql = 'select id from events where year = ? and month = ? and day = ? and hour = ?'
+        cursor.execute(sql, (year, month, day, hour))
         rows = cursor.fetchall()
         objects = []
         for row in rows:
@@ -410,7 +471,9 @@ class Event:
                 location text, \
                 year int, \
                 month int, \
-                day int \
+                day int, \
+                hour int, \
+                minute int \
             )'
         Event.connection.cursor().execute(sql)
 
@@ -432,15 +495,17 @@ class Event:
         connection = self.get_connection()
         cursor = connection.cursor()
         sql = 'insert into events \
-                (name, location, year, month, day) \
+                (name, location, year, month, day, hour, minute) \
                 values \
-                (?, ?, ?, ?, ?)'
+                (?, ?, ?, ?, ?, ?, ?)'
         values = (
             self.name,
             self.location,
             self.date.strftime('%Y'),
             self.date.strftime('%m'),
-            self.date.strftime('%d')
+            self.date.strftime('%d'),
+            str(self.hour),
+            str(self.minute)
         )
         cursor.execute(sql, values)
         connection.commit()
@@ -457,6 +522,8 @@ class Event:
                 year = ?, \
                 month = ?, \
                 day = ?, \
+                hour = ?, \
+                minute = ?, \
                 location = ? \
                 where id = ?'
         values = (
@@ -464,6 +531,8 @@ class Event:
             self.date.strftime('%Y'),
             self.date.strftime('%m'),
             self.date.strftime('%d'),
+            str(self.hour),
+            str(self.minute),
             self.location,
             self.id
         )
@@ -496,10 +565,18 @@ class WeekView(Gtk.Box):
         self.grid.set_column_homogeneous(True)
         self.grid.set_row_homogeneous(True)
 
+        first_date = date.today()
+        one_day = timedelta(1)
+        while first_date.weekday() != 0:
+            first_date = first_date - one_day
+
         # Add all hours in the week
         for day in range(0, 7):
             for hour in range(0, 23):
-                self.grid.attach(CalendarHour(day, hour), day, hour, 1, 1)
+                calendar_hour = CalendarHour(first_date, hour, self)
+                calendar_hour.date = first_date
+                self.grid.attach(calendar_hour, day, hour, 1, 1)
+            first_date = first_date + one_day
 
         self.scroller.add(self.grid)
         self.add(self.scroller)
@@ -508,6 +585,9 @@ class WeekView(Gtk.Box):
         if self.is_new and self.scroller.is_initialized():
             self.scroller.scroll_to(8 * 45 - 5, fast=True)
             self.is_new = False
+
+    def update_gui(self):
+        pass
 
 
 class Scroller(Gtk.ScrolledWindow):
