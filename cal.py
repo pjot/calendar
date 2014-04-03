@@ -125,7 +125,21 @@ class EventEditor:
         self.window.destroy()
 
 
-class CalendarHour(Gtk.EventBox):
+class CalendarDisplay(Gtk.EventBox):
+    def set_bg(self, color):
+        '''
+        Set the background of the box. Accepts ints between 0 and 256.
+
+        :param color: Color tuple (red, green, blue)
+        :type color: tuple
+        '''
+        red = color[0] / float(256)
+        green = color[1] / float(256)
+        blue = color[2] / float(256)
+        color = Gdk.Color.from_floats(red, green, blue)
+        self.modify_bg(Gtk.StateType.NORMAL, color)
+
+class CalendarHour(CalendarDisplay):
 
     OTHER_DAY        = (220, 220, 220)
     BUSINESS_DAY     = (170, 170, 170)
@@ -133,7 +147,7 @@ class CalendarHour(Gtk.EventBox):
     BUSINESS_WEEKEND = (150, 150, 150)
 
     def __init__(self, day, hour):
-        Gtk.EventBox.__init__(self)
+        CalendarDisplay.__init__(self)
         self.day = day
         self.hour = hour
 
@@ -162,21 +176,8 @@ class CalendarHour(Gtk.EventBox):
             else:
                 self.set_bg(self.OTHER_DAY)
 
-    def set_bg(self, color):
-        '''
-        Set the background of the box. Accepts ints between 0 and 256.
 
-        :param color: Color tuple (red, green, blue)
-        :type color: tuple
-        '''
-        red = color[0] / float(256)
-        green = color[1] / float(256)
-        blue = color[2] / float(256)
-        color = Gdk.Color.from_floats(red, green, blue)
-        self.modify_bg(Gtk.StateType.NORMAL, color)
-
-
-class CalendarDay(Gtk.EventBox):
+class CalendarDay(CalendarDisplay):
 
     #                r    g    b
     EVEN_DAY     = (220, 220, 220)
@@ -194,7 +195,7 @@ class CalendarDay(Gtk.EventBox):
         :param date: Date
         :type date: date
         '''
-        Gtk.EventBox.__init__(self)
+        CalendarDisplay.__init__(self)
         self.date = date
         self.parent = parent
         self.is_blocked = False
@@ -292,19 +293,6 @@ class CalendarDay(Gtk.EventBox):
                 self.set_bg(self.EVEN_WEEKEND)
             else:
                 self.set_bg(self.EVEN_DAY)
-
-    def set_bg(self, color):
-        '''
-        Set the background of the box. Accepts ints between 0 and 256.
-
-        :param color: Color tuple (red, green, blue)
-        :type color: tuple
-        '''
-        red = color[0] / float(256)
-        green = color[1] / float(256)
-        blue = color[2] / float(256)
-        color = Gdk.Color.from_floats(red, green, blue)
-        self.modify_bg(Gtk.StateType.NORMAL, color)
 
 
 class Event:
