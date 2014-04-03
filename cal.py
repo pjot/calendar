@@ -658,8 +658,6 @@ class FlexView(Gtk.Box):
         :returns CalendarDay: The CalendarDay
         '''
         for day in self.grid.get_children():
-            if isinstance(day, Gtk.Label):
-                continue
             if day.date == date:
                 return day
 
@@ -671,7 +669,7 @@ class FlexView(Gtk.Box):
         parent_allocation = self.scroller.get_allocation()
         i = 0
         for day in self.grid.get_children():
-            # One day per month is enough, speeds up calculation
+            # One day per week is enough, speeds up calculation
             if not i == 7:
                 i = i + 1
                 continue
