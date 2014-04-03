@@ -3,6 +3,8 @@
 from gi.repository import Gtk, Gdk
 from datetime import date, timedelta, datetime
 import sqlite3
+from threading import Timer
+import math
 
 
 class Month:
@@ -138,6 +140,7 @@ class CalendarDisplay(Gtk.EventBox):
         blue = color[2] / float(256)
         color = Gdk.Color.from_floats(red, green, blue)
         self.modify_bg(Gtk.StateType.NORMAL, color)
+
 
 class CalendarHour(CalendarDisplay):
 
@@ -483,7 +486,7 @@ class WeekView(Gtk.Box):
         self.parent = parent
         self.is_new = True
 
-        self.scroller = Gtk.ScrolledWindow()
+        self.scroller = Scroller()
         self.scroller.set_min_content_height(40)
         self.scroller.connect('size-allocate', self.initial_scroll)
 
@@ -502,11 +505,43 @@ class WeekView(Gtk.Box):
         self.add(self.scroller)
 
     def initial_scroll(self, *args):
-        adjustment = self.scroller.get_vadjustment()
-        is_initialized = adjustment.get_property('upper') != 1
-        if self.is_new and is_initialized:
-            adjustment.set_value(8 * 45 - 5)
+        if self.is_new and self.scroller.is_initialized():
+            self.scroller.scroll_to(8 * 45 - 5, fast=True)
             self.is_new = False
+
+
+class Scroller(Gtk.ScrolledWindow):
+    '''
+    Check if the Scroller is initialized
+    '''
+    def is_initialized(self):
+        return self.get_vadjustment().get_property('upper') != 1
+
+    '''
+    Scroll to a certain value of y. If fast == True, it animates the scrolling.
+    '''
+    def scroll_to(self, y=None, fast=False):
+        adjustment = self.get_vadjustment()
+        if fast:
+            adjustment.set_value(y)
+            return
+        if y:
+            self.target_y = y
+            self.current_step = 4
+        current_y = adjustment.get_value()
+        current_delta = math.fabs(math.fabs(current_y) - self.target_y)
+        if self.target_y != current_y:
+            if current_delta < self.current_step:
+                current_y = self.target_y
+            else:
+                if current_y > self.target_y:
+                    current_y = current_y - self.current_step
+                else:
+                    current_y = current_y + self.current_step
+            adjustment.set_value(current_y)
+            if self.current_step < 200:
+                self.current_step = self.current_step * 1.4
+            Timer(0.02, self.scroll_to).start()
 
 
 class FlexView(Gtk.Box):
@@ -525,7 +560,7 @@ class FlexView(Gtk.Box):
         Gtk.Box.__init__(self)
         self.is_new = True
         self.parent = parent
-        self.scroller = Gtk.ScrolledWindow()
+        self.scroller = Scroller()
         self.scroller.set_min_content_height(40)
         self.scroller.connect('size-allocate', self.initial_scroll)
 
@@ -623,12 +658,10 @@ class FlexView(Gtk.Box):
         self.scroll_to(today)
 
     def initial_scroll(self, *args):
-        adjustment = self.scroller.get_vadjustment()
-        is_initialized = adjustment.get_property('upper') != 1
-        if self.is_new and is_initialized:
+        if self.is_new and self.scroller.is_initialized():
             day_in_year = int(date.today().strftime('%j')) / 7
             scroll_top = day_in_year * 85 - 20
-            adjustment.set_value(scroll_top)
+            self.scroller.scroll_to(scroll_top, fast=True)
             self.is_new = False
 
     def scroll_to(self, to_date):
@@ -641,8 +674,7 @@ class FlexView(Gtk.Box):
         day_in_year = int(to_date.strftime('%j')) + 1
         rows = day_in_year / 7
         day_top = rows * 85 - 20
-        adjustment = self.scroller.get_vadjustment()
-        adjustment.set_value(day_top)
+        self.scroller.scroll_to(day_top)
         self.current_month.month = to_date.month
         self.current_month.year = to_date.year
         self.draw()
