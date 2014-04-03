@@ -750,6 +750,23 @@ class CalendarWindow(Gtk.Window):
     START_YEAR = 2010
     END_YEAR = 2020
 
+    def switcher_click(self, __, event):
+        allocation = self.stack_switcher.get_allocation()
+        if allocation.width / 2 < event.x:
+            self.set_view('flex')
+        else:
+            self.set_view('week')
+
+    def set_view(self, view):
+        self.stack.set_visible_child_name(view)
+        for widget in self.toolbar.get_children():
+            self.toolbar.remove(widget)
+        if view == 'week':
+            self.toolbar.add(self.week_box)
+        else:
+            self.toolbar.add(self.flex_box)
+        self.toolbar.show_all()
+
     def __init__(self):
         '''
         Creates a new Window and fills it with the interface
@@ -765,7 +782,12 @@ class CalendarWindow(Gtk.Window):
         # Toolbar
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
 
-        # Year label
+        # View toolbar
+        self.toolbar = Gtk.Box()
+        self.flex_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.week_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+
+        # Year dropdown
         year_store = Gtk.ListStore(int, str)
         for year in range(self.START_YEAR, self.END_YEAR):
             year_store.append([year, str(year)])
@@ -774,7 +796,7 @@ class CalendarWindow(Gtk.Window):
         self.year_dropdown.pack_start(renderer_text, True)
         self.year_dropdown.add_attribute(renderer_text, 'text', 1)
         self.year_dropdown.set_property('has-frame', False)
-        box.pack_start(self.year_dropdown, False, False, 0)
+        self.flex_box.pack_start(self.year_dropdown, False, False, 0)
 
         # Month dropdown
         month_store = Gtk.ListStore(int, str)
@@ -787,24 +809,48 @@ class CalendarWindow(Gtk.Window):
         # Render the text, but use the number as id
         self.month_dropdown.add_attribute(renderer_text, "text", 1)
         self.month_dropdown.set_property('has-frame', False)
-        box.pack_start(self.month_dropdown, False, False, 10)
+        self.flex_box.pack_start(self.month_dropdown, False, False, 10)
 
         # Today button
         self.today_button = Gtk.Button('Today')
-        box.pack_start(self.today_button, False, False, 0)
+        self.flex_box.pack_start(self.today_button, False, False, 0)
 
-        # Filler
-        box.pack_start(Gtk.Label(), True, True, 10)
+        # Week arrow left
+        self.previous_button = Gtk.Button()
+        left_arrow = Gtk.Arrow(Gtk.ArrowType.LEFT, Gtk.ShadowType.NONE)
+        self.previous_button.add(left_arrow)
+        self.week_box.pack_start(self.previous_button, False, False, 0)
+
+        # Week arrow right
+        self.next_button = Gtk.Button()
+        right_arrow = Gtk.Arrow(Gtk.ArrowType.RIGHT, Gtk.ShadowType.NONE)
+        self.next_button.add(right_arrow)
+        self.week_box.pack_start(self.next_button, False, False, 10)
+
+        # Week label
+        self.week_label = Gtk.Label()
+        self.week_box.pack_start(self.week_label, False, False, 0)
 
         # View buttons
-        stack = Gtk.Stack()
-        stack.set_transition_duration(200)
-        stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
-        stack_switcher = Gtk.StackSwitcher()
-        stack_switcher.set_stack(stack)
+        self.stack = Gtk.Stack()
+        self.stack.set_transition_duration(200)
+        self.stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
+        self.stack_switcher = Gtk.StackSwitcher()
+        self.stack_switcher.set_stack(self.stack)
+        event_box = Gtk.EventBox()
+        event_box.set_above_child(True)
+        event_box.set_visible_window(True)
+        event_box.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+        event_box.connect('button-press-event', self.switcher_click)
+        event_box.add(self.stack_switcher)
 
-        box.pack_start(stack_switcher, False, False, 0)
+        self.toolbar.add(self.week_box)
+        box.pack_start(self.toolbar, True, True, 0)
+        box.pack_start(event_box, False, False, 0)
         self.app_container.pack_start(box, False, True, 10)
+
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        self.app_container.pack_start(separator, False, False, 10)
 
         # Day names labels
         days_grid = Gtk.Grid()
@@ -823,12 +869,12 @@ class CalendarWindow(Gtk.Window):
 
         # Add views
         self.week_view = WeekView(self)
-        stack.add_titled(self.week_view, 'week', 'Week')
+        self.stack.add_titled(self.week_view, 'week', 'Week')
 
         self.flex_view = FlexView(self)
-        stack.add_titled(self.flex_view, 'flex', 'Flex')
+        self.stack.add_titled(self.flex_view, 'flex', 'Flex')
 
-        self.app_container.pack_start(stack, False, True, 5)
+        self.app_container.pack_start(self.stack, False, True, 5)
 
         self.add(self.app_container)
         self.show_all()
