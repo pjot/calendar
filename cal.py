@@ -776,7 +776,7 @@ class CalendarWindow(Gtk.Window):
         '''
         Gtk.Window.__init__(self)
 
-        self.set_icon_from_file('evolution-calendar.svg')
+        self.set_icon_from_file('images/evolution-calendar.svg')
         self.set_title('Calendar')
         self.set_border_width(10)
         self.set_default_size(800, 600)
