@@ -515,7 +515,8 @@ class WeekView(Gtk.Box):
 
     def initial_scroll(self, *args):
         adjustment = self.scroller.get_vadjustment()
-        if self.is_new and not adjustment.get_property('upper') == 1:
+        is_initialized = adjustment.get_property('upper') != 1
+        if self.is_new and is_initialized:
             adjustment.set_value(8 * 45 - 5)
             self.is_new = False
 
@@ -635,7 +636,8 @@ class FlexView(Gtk.Box):
 
     def initial_scroll(self, *args):
         adjustment = self.scroller.get_vadjustment()
-        if self.is_new and not adjustment.get_property('upper') == 1:
+        is_initialized = adjustment.get_property('upper') != 1
+        if self.is_new and is_initialized:
             day_in_year = int(date.today().strftime('%j')) / 7
             scroll_top = day_in_year * 85 - 20
             adjustment.set_value(scroll_top)
