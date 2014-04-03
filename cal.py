@@ -493,9 +493,11 @@ class WeekView(Gtk.Box):
     def __init__(self, parent):
         Gtk.Box.__init__(self)
         self.parent = parent
+        self.is_new = True
 
         self.scroller = Gtk.ScrolledWindow()
         self.scroller.set_min_content_height(40)
+        self.scroller.connect('size-allocate', self.initial_scroll)
 
         self.grid = Gtk.Grid()
         self.grid.set_column_spacing(5)
@@ -513,7 +515,9 @@ class WeekView(Gtk.Box):
 
     def initial_scroll(self, *args):
         adjustment = self.scroller.get_vadjustment()
-        adjustment.set_value(8 * 45 - 5)
+        if self.is_new and not adjustment.get_property('upper') == 1:
+            adjustment.set_value(8 * 45 - 5)
+            self.is_new = False
 
 
 class FlexView(Gtk.Box):
@@ -530,9 +534,11 @@ class FlexView(Gtk.Box):
         :type parent: CalendarWindow
         '''
         Gtk.Box.__init__(self)
+        self.is_new = True
         self.parent = parent
         self.scroller = Gtk.ScrolledWindow()
         self.scroller.set_min_content_height(40)
+        self.scroller.connect('size-allocate', self.initial_scroll)
 
         # Calendar days
         self.grid = Gtk.Grid()
@@ -545,14 +551,13 @@ class FlexView(Gtk.Box):
         self.add(self.scroller)
 
         self.scroller.connect('scroll-event', self.scrolling)
-        self.parent.month_dropdown.connect("changed", self.month_changed)
+        self.parent.month_dropdown.connect('changed', self.month_changed)
         self.parent.year_dropdown.connect('changed', self.year_changed)
         self.parent.today_button.connect('clicked', self.goto_today)
 
         current_date = date.today()
         self.current_month = Month(current_date.year, current_date.month)
         self.set_year(current_date.year)
-#        self.goto_today()
 
     def year_changed(self, combo):
         '''
@@ -629,10 +634,12 @@ class FlexView(Gtk.Box):
         self.scroll_to(today)
 
     def initial_scroll(self, *args):
-        day_in_year = int(date.today().strftime('%j')) / 7
-        scroll_top = day_in_year * 85 - 20
         adjustment = self.scroller.get_vadjustment()
-        adjustment.set_value(scroll_top)
+        if self.is_new and not adjustment.get_property('upper') == 1:
+            day_in_year = int(date.today().strftime('%j')) / 7
+            scroll_top = day_in_year * 85 - 20
+            adjustment.set_value(scroll_top)
+            self.is_new = False
 
     def scroll_to(self, to_date):
         '''
@@ -751,6 +758,12 @@ class CalendarWindow(Gtk.Window):
     END_YEAR = 2020
 
     def switcher_click(self, __, event):
+        '''
+        Somewhat hacky way of catching clicks in the stack switcher by
+        comparing the click's x to the middle of the switcher. The first half
+        of the switcher is the Week button and the second half is the Flex
+        button.
+        '''
         allocation = self.stack_switcher.get_allocation()
         if allocation.width / 2 < event.x:
             self.set_view('flex')
@@ -763,8 +776,10 @@ class CalendarWindow(Gtk.Window):
             self.toolbar.remove(widget)
         if view == 'week':
             self.toolbar.add(self.week_box)
+            self.week_view.initial_scroll()
         else:
             self.toolbar.add(self.flex_box)
+            self.flex_view.initial_scroll()
         self.toolbar.show_all()
 
     def __init__(self):
@@ -833,13 +848,12 @@ class CalendarWindow(Gtk.Window):
 
         # View buttons
         self.stack = Gtk.Stack()
-        self.stack.set_transition_duration(200)
+        self.stack.set_transition_duration(100)
         self.stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
         self.stack_switcher = Gtk.StackSwitcher()
         self.stack_switcher.set_stack(self.stack)
         event_box = Gtk.EventBox()
         event_box.set_above_child(True)
-        event_box.set_visible_window(True)
         event_box.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
         event_box.connect('button-press-event', self.switcher_click)
         event_box.add(self.stack_switcher)
@@ -878,6 +892,7 @@ class CalendarWindow(Gtk.Window):
 
         self.add(self.app_container)
         self.show_all()
+
 
 win = CalendarWindow()
 win.connect("delete-event", Gtk.main_quit)
