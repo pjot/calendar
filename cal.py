@@ -6,6 +6,31 @@ import sqlite3
 from threading import Timer
 import math
 
+class Week:
+    def __init__(self, date):
+        self.date = date
+        self.set_properties()
+        self.one_week = timedelta(7)
+
+    def matches(self, date):
+        same_year = self.year == date.year
+        same_week = self.week == int(date.strftime('%W'))
+        return same_year and same_week
+
+    def set_properties(self):
+        self.year = self.date.year
+        self.week = int(self.date.strftime('%W')) + 1
+
+    def increase(self):
+        self.date = self.date + self.one_week
+        self.set_properties()
+
+    def decrease(self):
+        self.date = self.date - self.one_week
+        self.set_properties()
+
+    def get_text(self):
+        return str(self.year) + ' - W' + str(self.week)
 
 class Month:
     def __init__(self, year, month):
@@ -168,6 +193,8 @@ class CalendarHour(CalendarDisplay):
     BUSINESS_DAY     = (170, 170, 170)
     OTHER_WEEKEND    = (200, 200, 200)
     BUSINESS_WEEKEND = (150, 150, 150)
+    OTHER_TODAY      = (150, 200, 150)
+    BUSINESS_TODAY   = (120, 170, 120)
 
     def __init__(self, date, hour, parent):
         CalendarDisplay.__init__(self)
@@ -220,11 +247,17 @@ class CalendarHour(CalendarDisplay):
             self.label.set_text(str(self.hour) + ':00')
 
         if self.hour > 8 and self.hour < 18:
+            if self.date == date.today():
+                self.set_bg(self.BUSINESS_TODAY)
+                return
             if self.date.weekday() in [5, 6]:
                 self.set_bg(self.BUSINESS_WEEKEND)
             else:
                 self.set_bg(self.BUSINESS_DAY)
         else:
+            if self.date == date.today():
+                self.set_bg(self.OTHER_TODAY)
+                return
             if self.date.weekday() in [5, 6]:
                 self.set_bg(self.OTHER_WEEKEND)
             else:
@@ -559,16 +592,41 @@ class WeekView(Gtk.Box):
         self.scroller.set_min_content_height(40)
         self.scroller.connect('size-allocate', self.initial_scroll)
 
+        self.parent.previous_button.connect('clicked', self.decrease)
+        self.parent.next_button.connect('clicked', self.increase)
+
         self.grid = Gtk.Grid()
         self.grid.set_column_spacing(5)
         self.grid.set_row_spacing(5)
         self.grid.set_column_homogeneous(True)
         self.grid.set_row_homogeneous(True)
 
-        first_date = date.today()
+        self.scroller.add(self.grid)
+        self.add(self.scroller)
+
+        self.current_week = Week(date.today())
+        self.add_days()
+        self.update_gui()
+
+    def decrease(self, *args):
+        self.current_week.decrease()
+        self.add_days()
+        self.update_gui()
+
+    def increase(self, *args):
+        self.current_week.increase()
+        self.add_days()
+        self.update_gui()
+
+    def add_days(self):
+        first_date = self.current_week.date
+
         one_day = timedelta(1)
         while first_date.weekday() != 0:
             first_date = first_date - one_day
+
+        for widget in self.grid.get_children():
+            widget.destroy()
 
         # Add all hours in the week
         for day in range(0, 7):
@@ -578,16 +636,14 @@ class WeekView(Gtk.Box):
                 self.grid.attach(calendar_hour, day, hour, 1, 1)
             first_date = first_date + one_day
 
-        self.scroller.add(self.grid)
-        self.add(self.scroller)
-
     def initial_scroll(self, *args):
         if self.is_new and self.scroller.is_initialized():
             self.scroller.scroll_to(8 * 45 - 5, fast=True)
             self.is_new = False
 
     def update_gui(self):
-        pass
+        self.grid.show_all()
+        self.parent.week_label.set_text(self.current_week.get_text())
 
 
 class Scroller(Gtk.ScrolledWindow):
