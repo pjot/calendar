@@ -296,7 +296,11 @@ class CalendarDay(CalendarDisplay):
         self.grid.set_row_spacing(5)
 
         self.label = Gtk.Label()
-        self.main_box.add(self.label)
+        self.week_label = Gtk.Label()
+        label_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        label_box.add(self.label)
+        label_box.add(self.week_label)
+        self.main_box.add(label_box)
         self.main_box.add(self.grid)
         # Days should be at least 80
         self.set_size_request(-1, 80)
@@ -305,6 +309,9 @@ class CalendarDay(CalendarDisplay):
         self.set_vexpand(True)
         # Add some padding to the date string in the boxes
         self.label.set_alignment(0.05, 0.1)
+        self.label.set_hexpand(True)
+        self.week_label.set_alignment(0.95, 0.9)
+        self.week_label.set_margin_right(5)
         self.label.modify_bg(Gtk.StateType.NORMAL, None)
         self.label.set_text('')
         self.refresh_events()
@@ -351,12 +358,18 @@ class CalendarDay(CalendarDisplay):
         :param current_month: Current month
         :type current_month: Month
         '''
+        week_text = ''
+        day_text = ''
         if self.date.year == self.parent.parent.year:
-            self.label.set_text(self.date.strftime('%d'))
+            day_text = self.date.strftime('%d')
+            if self.date.weekday() == 6:
+                week_text = str(int(self.date.strftime('%W')) + 1)
         else:
             self.label.set_text('')
             self.label.modify_bg(Gtk.StateType.NORMAL, None)
             return
+        self.label.set_text(day_text)
+        self.week_label.set_markup('<b>' + week_text + '</b>')
         if self.date == date.today():
             # Day is today
             self.set_bg(self.TODAY)
