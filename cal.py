@@ -2,10 +2,12 @@
 
 from gi.repository import Gtk, Gdk
 from datetime import date, timedelta, datetime
-import sqlite3
 from threading import Timer
-import math
 from icalendar import Calendar, Event
+import math
+import sqlite3
+import sys
+import getopt
 
 
 class Week:
@@ -228,6 +230,7 @@ class EventEditor:
         # Give the click event back to the Initiator
         self.initiator.is_blocked = False
         self.initiator.parent.update_gui()
+        self.initiator.parent.parent.show_message('Successfully added event')
         self.window.destroy()
 
     def close(self, *args):
@@ -1076,6 +1079,11 @@ class FlexView(Gtk.Box):
         if not calendar_day.is_blocked:
             event = Event()
             event.date = calendar_day.date
+            now = datetime.now()
+            event.start_hour = now.hour
+            event.end_hour = now.hour + 1
+            event.start_minute = 0
+            event.end_minute = 0
             EventEditor(event, calendar_day)
 
     def draw(self):
@@ -1134,6 +1142,9 @@ class CalendarWindow(Gtk.Window):
         self.current_view.update_gui()
         self.toolbar.show_all()
 
+    def show_message(self, message):
+        self.message_bar.show_message(message)
+
     def __init__(self):
         '''
         Creates a new Window and fills it with the interface
@@ -1147,6 +1158,9 @@ class CalendarWindow(Gtk.Window):
         self.year = 0
         self.show_week_dropdown = False
         self.app_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+
+        # Message bar
+        self.message_bar = MessageBar(self)
 
         # Toolbar
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -1219,7 +1233,6 @@ class CalendarWindow(Gtk.Window):
         box.pack_start(self.toolbar, True, True, 0)
 
         # File button
-        #file_button = Gtk.Button.new_from_stock(Gtk.STOCK_ADD)
         file_button = Gtk.Button.new_from_icon_name('list-add', Gtk.IconSize.MENU)
         file_button.connect('clicked', self.file_button)
         box.pack_start(file_button, False, False, 10)
@@ -1236,9 +1249,6 @@ class CalendarWindow(Gtk.Window):
         )
         self.app_container.pack_start(self.days_grid, False, True, 5)
 
-        # Separator
-        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        self.app_container.pack_start(separator, False, False, 10)
 
         # Add views
         self.week_view = WeekView(self)
@@ -1252,8 +1262,12 @@ class CalendarWindow(Gtk.Window):
 
         self.app_container.pack_start(self.stack, False, True, 5)
 
+        # Message bar
+        self.app_container.pack_start(self.message_bar, False, True, 5)
+
         self.add(self.app_container)
         self.show_all()
+        self.message_bar.hide()
 
     def file_button(self, *args):
         dialog = Gtk.FileChooserDialog("Please choose a file", self,
@@ -1265,6 +1279,7 @@ class CalendarWindow(Gtk.Window):
         if response == Gtk.ResponseType.OK:
             self.open_file(dialog.get_filename())
         dialog.destroy()
+
 
     def open_file(self, file_path):
         with open(file_path) as f:
@@ -1287,6 +1302,7 @@ class CalendarWindow(Gtk.Window):
                 event.end_hour = int(end.strftime('%H'))
                 event.end_minute = int(end.strftime('%M'))
                 event.save()
+                self.show_message('Successfully added event')
                 self.current_view.update_gui()
 
     def set_day_labels(self, labels):
@@ -1300,6 +1316,93 @@ class CalendarWindow(Gtk.Window):
         self.days_grid.show_all()
 
 
+class MessageBar(Gtk.EventBox):
+    SHOW_TIME = 0.01
+    HIDE_TIME = 0.01
+    MAX_HEIGHT = 20
+    STEP_SIZE = 1
+
+    def __init__(self, parent):
+        Gtk.EventBox.__init__(self)
+        self.is_hidden = True
+        self.is_animated = False
+        self.parent = parent
+
+        color = Gdk.Color.from_floats(120/256.0, 170/256.0, 120/256.0)
+
+        self.label = Gtk.Label()
+        self.label.modify_bg(Gtk.StateType.NORMAL, color)
+        self.label.set_size_request(-1, self.MAX_HEIGHT)
+
+        self.area = Gtk.DrawingArea()
+        self.area.set_size_request(-1, 0)
+        self.area.modify_bg(Gtk.StateType.NORMAL, color)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.add(self.area)
+        box.add(self.label)
+
+        self.add(box)
+        self.connect('show', self.check_visible)
+
+    def check_visible(self, *args):
+        if self.is_hidden:
+            self.hide()
+
+    def show_message(self, message=None):
+        if self.is_animated:
+            __, height = self.area.get_size_request()
+            if height > self.MAX_HEIGHT:
+                self.is_animated = False
+                self.area.hide()
+                self.area.set_size_request(-1, 0)
+                self.label.show()
+                self.label.set_text(self.message)
+                return
+            self.area.set_size_request(-1, height + self.STEP_SIZE)
+            Timer(self.SHOW_TIME, self.show_message).start()
+            return
+        self.is_hidden = False
+        self.is_animated = True
+        self.message = message + ' (Click to hide)'
+        self.label.set_text('')
+        self.label.hide()
+        self.area.show()
+        self.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+        self.connect('button-press-event', self.hide_message)
+        self.show()
+        self.set_size_request(-1, 0)
+        Timer(self.SHOW_TIME, self.show_message).start()
+
+    def hide_message(self, *args):
+        if self.is_animated:
+            __, height = self.area.get_size_request()
+            if height == 1:
+                self.is_animated = False
+                self.is_hidden = True
+                self.area.hide()
+                self.label.hide()
+                self.hide()
+                self.label.set_text('')
+                return
+            self.area.set_size_request(-1, height - self.STEP_SIZE)
+            Timer(self.HIDE_TIME, self.hide_message).start()
+            return
+        self.is_animated = True
+        self.is_hidden = False
+        self.label.set_text('')
+        self.label.hide()
+        self.area.show()
+        self.area.set_size_request(-1, self.MAX_HEIGHT)
+        Timer(self.HIDE_TIME, self.hide_message).start()
+
+
 win = CalendarWindow()
 win.connect("delete-event", Gtk.main_quit)
+
+opts, args = getopt.getopt(sys.argv[1:], 'i', ['import='])
+for opt, arg in opts:
+    if opt in ('-i', '--import'):
+        win.open_file(arg)
+
 Gtk.main()
