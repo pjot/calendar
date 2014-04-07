@@ -6,6 +6,7 @@ import sqlite3
 from threading import Timer
 import math
 
+
 class Week:
     def __init__(self, date):
         self.date = date
@@ -31,6 +32,7 @@ class Week:
 
     def get_text(self):
         return str(self.year) + ' - W' + str(self.week)
+
 
 class Month:
     def __init__(self, year, month):
@@ -77,12 +79,14 @@ class EventEditor:
         self.calendar_day = calendar_day
 
         self.window = Gtk.Window()
-        app_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        app_container = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            margin_left=10,
+            margin_right=10,
+        )
 
         # Form grid
-        grid = Gtk.Grid()
-        grid.set_row_spacing(5)
-        grid.set_column_spacing(5)
+        grid = Gtk.Grid(row_spacing=5, column_spacing=5)
 
         # Name field
         grid.attach(Gtk.Label('Name', xalign=1), 0, 0, 1, 1)
@@ -160,8 +164,6 @@ class EventEditor:
         # Put everything together and show the window
         app_container.pack_start(grid, True, True, 10)
         app_container.pack_start(buttons, False, True, 10)
-        app_container.set_margin_left(10)
-        app_container.set_margin_right(10)
         self.window.add(app_container)
 
         self.window.show_all()
@@ -229,6 +231,7 @@ class CalendarDisplay(Gtk.EventBox):
 
 class CalendarHour(CalendarDisplay):
 
+    #                    r    g    b
     OTHER_DAY        = (220, 220, 220)
     BUSINESS_DAY     = (170, 170, 170)
     OTHER_WEEKEND    = (200, 200, 200)
@@ -260,7 +263,13 @@ class CalendarHour(CalendarDisplay):
 
     def set_events(self):
         self.events = set()
-        for event in Event.get_by_hour(self.date.year, self.date.month, self.date.day, self.hour):
+        events = Event.get_by_hour(
+            self.date.year,
+            self.date.month,
+            self.date.day,
+            self.hour,
+        )
+        for event in events:
             self.add_event(event)
 
     def refresh_events(self):
@@ -273,13 +282,11 @@ class CalendarHour(CalendarDisplay):
         # Re-add them
         self.set_events()
         for i, event in enumerate(self.events):
-            area = Gtk.DrawingArea()
+            area = Gtk.DrawingArea(margin_top=5, margin_left=5)
             area.set_size_request(15, 15)
             color = Gdk.Color.from_floats(0.2, 0.5, 0.2)
             area.modify_bg(Gtk.StateType.NORMAL, color)
             area.event_id = event.id
-            area.set_margin_top(5)
-            area.set_margin_left(5)
             area.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
             area.connect('button-press-event', self._edit_event)
             # Add 5 events per row
@@ -336,11 +343,10 @@ class CalendarDay(CalendarDisplay):
             self.add_event(event)
 
         self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.grid = Gtk.Grid()
-        self.grid.set_row_spacing(5)
+        self.grid = Gtk.Grid(row_spacing=5)
 
-        self.label = Gtk.Label()
-        self.week_label = Gtk.Label()
+        self.label = Gtk.Label(hexpand=True)
+        self.week_label = Gtk.Label(margin_right=5)
         label_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         label_box.add(self.label)
         label_box.add(self.week_label)
@@ -353,9 +359,7 @@ class CalendarDay(CalendarDisplay):
         self.set_vexpand(True)
         # Add some padding to the date string in the boxes
         self.label.set_alignment(0.05, 0.1)
-        self.label.set_hexpand(True)
         self.week_label.set_alignment(0.95, 0.9)
-        self.week_label.set_margin_right(5)
         self.label.modify_bg(Gtk.StateType.NORMAL, None)
         self.label.set_text('')
         self.refresh_events()
@@ -369,17 +373,15 @@ class CalendarDay(CalendarDisplay):
             widget.destroy()
         # Re-add them
         for i, event in enumerate(self.events):
-            area = Gtk.DrawingArea()
+            area = Gtk.DrawingArea(margin_left=5)
             area.set_size_request(15, 15)
             color = Gdk.Color.from_floats(0.2, 0.5, 0.2)
             area.modify_bg(Gtk.StateType.NORMAL, color)
             area.event_id = event.id
-            area.set_margin_left(5)
             area.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
             area.connect('button-press-event', self._edit_event)
             # Add 5 events per row
             self.grid.attach(area, i % 5, i / 5, 1, 1)
-
 
     def __eq__(self, other):
         '''
@@ -513,7 +515,9 @@ class Event:
     @staticmethod
     def get_by_hour(year, month, day, hour):
         cursor = Event.get_connection().cursor()
-        sql = 'select id from events where year = ? and month = ? and day = ? and hour = ?'
+        sql = 'select id \
+                from events \
+                where year = ? and month = ? and day = ? and hour = ?'
         cursor.execute(sql, (year, month, day, hour))
         rows = cursor.fetchall()
         objects = []
@@ -648,18 +652,18 @@ class WeekView(Gtk.Box):
 
         self.one_day = timedelta(1)
 
-        self.scroller = Scroller()
-        self.scroller.set_min_content_height(40)
+        self.scroller = Scroller(min_content_height=40)
         self.scroller.connect('size-allocate', self.initial_scroll)
 
         self.parent.previous_button.connect('clicked', self.decrease)
         self.parent.next_button.connect('clicked', self.increase)
 
-        self.grid = Gtk.Grid()
-        self.grid.set_column_spacing(5)
-        self.grid.set_row_spacing(5)
-        self.grid.set_column_homogeneous(True)
-        self.grid.set_row_homogeneous(True)
+        self.grid = Gtk.Grid(
+            column_spacing=5,
+            row_spacing=5,
+            column_homogeneous=True,
+            row_homogeneous=True,
+        )
 
         self.scroller.add(self.grid)
         self.add(self.scroller)
@@ -728,7 +732,7 @@ class Scroller(Gtk.ScrolledWindow):
         return self.get_vadjustment().get_property('upper') != 1
 
     '''
-    Scroll to a certain value of y. If fast == True, it animates the scrolling.
+    Scroll to a certain value of y. If fast == False, it animates the scrolling
     '''
     def scroll_to(self, y=None, fast=False):
         adjustment = self.get_vadjustment()
@@ -771,16 +775,16 @@ class FlexView(Gtk.Box):
         Gtk.Box.__init__(self)
         self.is_new = True
         self.parent = parent
-        self.scroller = Scroller()
-        self.scroller.set_min_content_height(40)
+        self.scroller = Scroller(min_content_height=40)
         self.scroller.connect('size-allocate', self.initial_scroll)
 
         # Calendar days
-        self.grid = Gtk.Grid()
-        self.grid.set_row_spacing(5)
-        self.grid.set_column_spacing(5)
-        self.grid.set_column_homogeneous(True)
-        self.grid.set_row_homogeneous(True)
+        self.grid = Gtk.Grid(
+            row_spacing=5,
+            column_spacing=5,
+            row_homogeneous=True,
+            column_homogeneous=True,
+        )
         self.scroller.add(self.grid)
 
         self.add(self.scroller)
@@ -1008,12 +1012,14 @@ class CalendarWindow(Gtk.Window):
         self.stack.set_visible_child_name(view)
         for widget in self.toolbar.get_children():
             self.toolbar.remove(widget)
+
         if view == 'week':
             self.current_view = self.week_view
             self.toolbar.add(self.week_box)
         else:
             self.current_view = self.flex_view
             self.toolbar.add(self.flex_box)
+
         self.current_view.initial_scroll()
         self.current_view.update_days()
         self.toolbar.show_all()
@@ -1085,13 +1091,12 @@ class CalendarWindow(Gtk.Window):
         self.week_box.pack_start(self.week_label, False, False, 0)
 
         # View buttons
-        self.stack = Gtk.Stack()
-        self.stack.set_transition_duration(100)
-        self.stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
-        self.stack_switcher = Gtk.StackSwitcher()
-        self.stack_switcher.set_stack(self.stack)
-        event_box = Gtk.EventBox()
-        event_box.set_above_child(True)
+        self.stack = Gtk.Stack(
+            transition_duration=100,
+            transition_type=Gtk.StackTransitionType.SLIDE_LEFT_RIGHT,
+        )
+        self.stack_switcher = Gtk.StackSwitcher(stack=self.stack)
+        event_box = Gtk.EventBox(above_child=True)
         event_box.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
         event_box.connect('button-press-event', self.switcher_click)
         event_box.add(self.stack_switcher)
@@ -1103,11 +1108,12 @@ class CalendarWindow(Gtk.Window):
         self.app_container.pack_start(box, False, True, 10)
 
         # Day names labels
-        self.days_grid = Gtk.Grid()
-        self.days_grid.set_column_spacing(5)
-        self.days_grid.set_row_spacing(0)
-        self.days_grid.set_column_homogeneous(True)
-        self.days_grid.set_margin_right(15)
+        self.days_grid = Gtk.Grid(
+            column_spacing=5,
+            row_spacing=0,
+            column_homogeneous=True,
+            margin_right=15,
+        )
         self.app_container.pack_start(self.days_grid, False, True, 5)
 
         # Separator
@@ -1134,12 +1140,11 @@ class CalendarWindow(Gtk.Window):
             widget.destroy()
 
         for x, day in enumerate(labels):
-            label = Gtk.Label()
+            label = Gtk.Label(vexpand=False, hexpand=False)
             label.set_text(day)
-            label.set_vexpand(False)
-            label.set_hexpand(False)
             self.days_grid.attach(label, x + 1, 0, 1, 1)
         self.days_grid.show_all()
+
 
 win = CalendarWindow()
 win.connect("delete-event", Gtk.main_quit)
