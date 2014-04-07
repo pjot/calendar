@@ -290,7 +290,7 @@ class CalendarHour(CalendarDisplay):
         self.grid = Gtk.Grid()
         self.label.set_alignment(0.1, 0.1)
         if self.date.weekday() == 0:
-            self.main_box.add(self.label)
+            self.main_box.pack_start(self.label, False, False, 5)
         self.main_box.add(self.grid)
         self.set_size_request(-1, 40)
         self.add(self.main_box)
