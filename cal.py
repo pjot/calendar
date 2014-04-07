@@ -5,6 +5,7 @@ from datetime import date, timedelta, datetime
 import sqlite3
 from threading import Timer
 import math
+from icalendar import Calendar, Event
 
 
 class Week:
@@ -17,6 +18,10 @@ class Week:
         same_year = self.year == date.year
         same_week = self.week == int(date.strftime('%W'))
         return same_year and same_week
+
+    def set_date(self, date):
+        self.date = date
+        self.set_properties()
 
     def set_properties(self):
         self.year = self.date.year
@@ -67,7 +72,7 @@ class Month:
 
 
 class EventEditor:
-    def __init__(self, event, calendar_day):
+    def __init__(self, event, initiator):
         '''
         Creates an Event edit window
 
@@ -76,51 +81,63 @@ class EventEditor:
         '''
         self.event = event
         self.date = event.date
-        self.calendar_day = calendar_day
+        self.initiator = initiator
 
         self.window = Gtk.Window()
+        self.window.set_size_request(400, 400)
         app_container = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
             margin_left=10,
             margin_right=10,
+            hexpand=True,
+            vexpand=True
         )
 
         # Form grid
-        grid = Gtk.Grid(row_spacing=5, column_spacing=5)
+        grid = Gtk.Grid(row_spacing=5, column_spacing=5, hexpand=True, vexpand=True)
 
         # Name field
-        grid.attach(Gtk.Label('Name', xalign=1), 0, 0, 1, 1)
-        self.name_entry = Gtk.Entry()
+        grid.attach(Gtk.Label('Name:', xalign=1), 0, 0, 1, 1)
+        self.name_entry = Gtk.Entry(hexpand=True)
         self.name_entry.set_text(self.event.name)
         grid.attach(self.name_entry, 1, 0, 1, 1)
 
         # Date field
-        grid.attach(Gtk.Label('Date', xalign=1), 0, 1, 1, 1)
-        self.date_entry = Gtk.Entry()
+        grid.attach(Gtk.Label('Date:', xalign=1), 0, 1, 1, 1)
+        self.date_entry = Gtk.Entry(hexpand=True)
         self.date_entry.set_text(self.date.strftime('%Y-%m-%d'))
         grid.attach(self.date_entry, 1, 1, 1, 1)
 
-        # Time field
-        grid.attach(Gtk.Label('Time', xalign=1), 0, 2, 1, 1)
-
-        time_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        # Time fields
+        start_time_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        end_time_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
 
         # Hours
+        renderer_text = Gtk.CellRendererText()
         hour_store = Gtk.ListStore(int, str)
         for hour in range(0, 23):
             padded = str(hour)
             if hour < 10:
                 padded = '0' + padded
             hour_store.append([hour, padded])
-        self.hour_dropdown = Gtk.ComboBox.new_with_model(hour_store)
-        renderer_text = Gtk.CellRendererText()
-        self.hour_dropdown.pack_start(renderer_text, True)
-        self.hour_dropdown.add_attribute(renderer_text, 'text', 1)
-        self.hour_dropdown.set_property('has-frame', False)
-        self.hour_dropdown.set_active(self.event.hour)
-        time_box.add(self.hour_dropdown)
 
-        time_box.pack_start(Gtk.Label(':'), False, False, 5)
+        self.start_hour_dropdown = Gtk.ComboBox.new_with_model(hour_store)
+        self.start_hour_dropdown.pack_start(renderer_text, True)
+        self.start_hour_dropdown.add_attribute(renderer_text, 'text', 1)
+        self.start_hour_dropdown.set_property('has-frame', False)
+        self.start_hour_dropdown.set_active(self.event.start_hour)
+        start_time_box.add(self.start_hour_dropdown)
+
+        self.end_hour_dropdown = Gtk.ComboBox.new_with_model(hour_store)
+        self.end_hour_dropdown.pack_end(renderer_text, True)
+        self.end_hour_dropdown.add_attribute(renderer_text, 'text', 1)
+        self.end_hour_dropdown.set_property('has-frame', False)
+        self.end_hour_dropdown.set_active(self.event.end_hour)
+        end_time_box.add(self.end_hour_dropdown)
+
+        # Separator
+        start_time_box.pack_start(Gtk.Label(':'), False, False, 5)
+        end_time_box.pack_start(Gtk.Label(':'), False, False, 5)
 
         # Minutes
         minute_store = Gtk.ListStore(int, str)
@@ -129,21 +146,32 @@ class EventEditor:
             if minute < 10:
                 padded = '0' + padded
             minute_store.append([minute, padded])
-        self.minute_dropdown = Gtk.ComboBox.new_with_model(minute_store)
-        renderer_text = Gtk.CellRendererText()
-        self.minute_dropdown.pack_start(renderer_text, True)
-        self.minute_dropdown.add_attribute(renderer_text, 'text', 1)
-        self.minute_dropdown.set_property('has-frame', False)
-        self.minute_dropdown.set_active(self.event.minute)
-        time_box.add(self.minute_dropdown)
 
-        grid.attach(time_box, 1, 2, 1, 1)
+        self.start_minute_dropdown = Gtk.ComboBox.new_with_model(minute_store)
+        self.start_minute_dropdown.pack_start(renderer_text, True)
+        self.start_minute_dropdown.add_attribute(renderer_text, 'text', 1)
+        self.start_minute_dropdown.set_property('has-frame', False)
+        self.start_minute_dropdown.set_active(self.event.start_minute)
+        start_time_box.add(self.start_minute_dropdown)
+
+        self.end_minute_dropdown = Gtk.ComboBox.new_with_model(minute_store)
+        self.end_minute_dropdown.pack_start(renderer_text, True)
+        self.end_minute_dropdown.add_attribute(renderer_text, 'text', 1)
+        self.end_minute_dropdown.set_property('has-frame', False)
+        self.end_minute_dropdown.set_active(self.event.end_minute)
+        end_time_box.add(self.end_minute_dropdown)
+
+        grid.attach(Gtk.Label('Start Time:', xalign=1), 0, 2, 1, 1)
+        grid.attach(start_time_box, 1, 2, 1, 1)
+
+        grid.attach(Gtk.Label('End Time:', xalign=1), 0, 3, 1, 1)
+        grid.attach(end_time_box, 1, 3, 1, 1)
 
         # Location field
-        grid.attach(Gtk.Label('Location', xalign=1), 0, 3, 1, 1)
-        self.location_entry = Gtk.Entry()
+        grid.attach(Gtk.Label('Location:', xalign=1), 0, 4, 1, 1)
+        self.location_entry = Gtk.Entry(hexpand=True)
         self.location_entry.set_text(self.event.location)
-        grid.attach(self.location_entry, 1, 3, 1, 1)
+        grid.attach(self.location_entry, 1, 4, 1, 1)
 
         # Button box
         buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -178,29 +206,35 @@ class EventEditor:
         date = self.date_entry.get_text()
         event.date = datetime.strptime(date, '%Y-%m-%d').date()
 
-        iterator = self.hour_dropdown.get_active_iter()
-        model = self.hour_dropdown.get_model()
-        # 0 is the id, 1 is the name
-        event.hour = model[iterator][0]
+        iterator = self.start_hour_dropdown.get_active_iter()
+        model = self.start_hour_dropdown.get_model()
+        event.start_hour = model[iterator][0]
 
-        iterator = self.minute_dropdown.get_active_iter()
-        model = self.minute_dropdown.get_model()
-        # 0 is the id, 1 is the name
-        event.minute = model[iterator][0]
+        iterator = self.start_minute_dropdown.get_active_iter()
+        model = self.start_minute_dropdown.get_model()
+        event.start_minute = model[iterator][0]
+
+        iterator = self.end_hour_dropdown.get_active_iter()
+        model = self.end_hour_dropdown.get_model()
+        event.end_hour = model[iterator][0]
+
+        iterator = self.end_minute_dropdown.get_active_iter()
+        model = self.end_minute_dropdown.get_model()
+        event.end_minute = model[iterator][0]
 
         event.save()
-        self.calendar_day.add_event(event)
-        self.calendar_day.refresh_events()
-        # Give the click event back to the Calendar Day
-        self.calendar_day.is_blocked = False
-        self.calendar_day.parent.update_gui()
+        self.initiator.add_event(event)
+        self.initiator.refresh_events()
+        # Give the click event back to the Initiator
+        self.initiator.is_blocked = False
+        self.initiator.parent.update_gui()
         self.window.destroy()
 
     def close(self, *args):
         '''
         Closes the window
         '''
-        self.calendar_day.is_blocked = False
+        self.initiator.is_blocked = False
         self.window.destroy()
 
 
@@ -244,6 +278,7 @@ class CalendarHour(CalendarDisplay):
         self.date = date
         self.hour = hour
         self.parent = parent
+        self.is_blocked = False
 
         self.set_events()
 
@@ -282,12 +317,8 @@ class CalendarHour(CalendarDisplay):
         # Re-add them
         self.set_events()
         for i, event in enumerate(self.events):
-            area = Gtk.DrawingArea(margin_top=5, margin_left=5)
-            area.set_size_request(15, 15)
-            color = Gdk.Color.from_floats(0.2, 0.5, 0.2)
-            area.modify_bg(Gtk.StateType.NORMAL, color)
+            area = EventDisplay()
             area.event_id = event.id
-            area.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
             area.connect('button-press-event', self._edit_event)
             # Add 5 events per row
             self.grid.attach(area, i % 5, i / 5, 1, 1)
@@ -315,6 +346,18 @@ class CalendarHour(CalendarDisplay):
                 self.set_bg(self.OTHER_DAY)
 
 
+class EventDisplay(Gtk.DrawingArea):
+
+    def __init__(self, *args):
+        Gtk.DrawingArea.__init__(self)
+        self.set_margin_top(5)
+        self.set_margin_left(5)
+        self.set_size_request(15, 15)
+        color = Gdk.Color.from_floats(0.2, 0.5, 0.2)
+        self.modify_bg(Gtk.StateType.NORMAL, color)
+        self.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+
+
 class CalendarDay(CalendarDisplay):
 
     #                r    g    b
@@ -338,9 +381,7 @@ class CalendarDay(CalendarDisplay):
         self.parent = parent
         self.is_blocked = False
 
-        self.events = set()
-        for event in Event.get_by_day(date.year, date.month, date.day):
-            self.add_event(event)
+        self.set_events()
 
         self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.grid = Gtk.Grid(row_spacing=5)
@@ -364,6 +405,16 @@ class CalendarDay(CalendarDisplay):
         self.label.set_text('')
         self.refresh_events()
 
+    def set_events(self):
+        self.events = set()
+        events = Event.get_by_day(
+            self.date.year,
+            self.date.month,
+            self.date.day
+        )
+        for event in events:
+            self.add_event(event)
+
     def refresh_events(self):
         '''
         Refresh the events in the view
@@ -372,6 +423,7 @@ class CalendarDay(CalendarDisplay):
         for widget in self.grid.get_children():
             widget.destroy()
         # Re-add them
+        self.set_events()
         for i, event in enumerate(self.events):
             area = Gtk.DrawingArea(margin_left=5)
             area.set_size_request(15, 15)
@@ -446,6 +498,13 @@ class Event:
         self.time = ''
         self.id = ''
         self.location = ''
+        now = datetime.now()
+        self.start_hour = now.hour
+        self.start_minute = now.minute
+        now = now + timedelta(hours=1)
+        self.end_hour = now.hour
+        self.end_minute = now.minute
+        self.date = None
 
     def echo(self):
         '''
@@ -455,8 +514,10 @@ class Event:
         print 'ID:', self.id
         print 'Name:', self.name
         print 'Location:', self.location
-        print 'Hour:', self.hour
-        print 'Minute:', self.minute
+        print 'Start Hour:', self.start_hour
+        print 'Start Minute:', self.start_minute
+        print 'End Hour:', self.end_hour
+        print 'End Minute:', self.end_minute
         print 'Year:', self.year
         print 'Month:', self.month
         print 'Day:', self.day
@@ -478,8 +539,10 @@ class Event:
                 year, \
                 month, \
                 day, \
-                hour, \
-                minute \
+                start_hour, \
+                start_minute, \
+                end_hour, \
+                end_minute \
             from events where id = ?'
         cursor.execute(sql, (str(id),))
         row = cursor.fetchone()
@@ -491,8 +554,10 @@ class Event:
         event.year = int(row[2])
         event.month = int(row[3])
         event.day = int(row[4])
-        event.hour = int(row[5])
-        event.minute = int(row[6])
+        event.start_hour = int(row[5])
+        event.start_minute = int(row[6])
+        event.end_hour = int(row[7])
+        event.end_minute = int(row[8])
         event.is_saved = True
         event.date = date(event.year, event.month, event.day)
         return event
@@ -517,7 +582,7 @@ class Event:
         cursor = Event.get_connection().cursor()
         sql = 'select id \
                 from events \
-                where year = ? and month = ? and day = ? and hour = ?'
+                where year = ? and month = ? and day = ? and start_hour = ?'
         cursor.execute(sql, (year, month, day, hour))
         rows = cursor.fetchall()
         objects = []
@@ -556,6 +621,7 @@ class Event:
         Connect to the database and create the schema if it does not exist.
         '''
         Event.connection = sqlite3.connect('test.db')
+        Event.connection.text_factory = str
         Event.is_connected = True
         sql = 'create table if not exists \
             events ( \
@@ -565,8 +631,10 @@ class Event:
                 year int, \
                 month int, \
                 day int, \
-                hour int, \
-                minute int \
+                start_hour int, \
+                start_minute int, \
+                end_hour int, \
+                end_minute int \
             )'
         Event.connection.cursor().execute(sql)
 
@@ -587,18 +655,34 @@ class Event:
         '''
         connection = self.get_connection()
         cursor = connection.cursor()
+        if isinstance(self.date, date):
+            self.year = self.date.strftime('%Y')
+            self.month = self.date.strftime('%m')
+            self.day = self.date.strftime('%d')
         sql = 'insert into events \
-                (name, location, year, month, day, hour, minute) \
+                ( \
+                    name, \
+                    location, \
+                    year, \
+                    month, \
+                    day, \
+                    start_hour, \
+                    start_minute, \
+                    end_hour, \
+                    end_minute \
+                ) \
                 values \
-                (?, ?, ?, ?, ?, ?, ?)'
+                (?, ?, ?, ?, ?, ?, ?, ?, ?)'
         values = (
             self.name,
             self.location,
-            self.date.strftime('%Y'),
-            self.date.strftime('%m'),
-            self.date.strftime('%d'),
-            str(self.hour),
-            str(self.minute)
+            self.year,
+            self.month,
+            self.day,
+            str(self.start_hour),
+            str(self.start_minute),
+            str(self.end_hour),
+            str(self.end_minute)
         )
         cursor.execute(sql, values)
         connection.commit()
@@ -615,8 +699,10 @@ class Event:
                 year = ?, \
                 month = ?, \
                 day = ?, \
-                hour = ?, \
-                minute = ?, \
+                start_hour = ?, \
+                start_minute = ?, \
+                end_hour = ?, \
+                end_minute = ?, \
                 location = ? \
                 where id = ?'
         values = (
@@ -624,9 +710,11 @@ class Event:
             self.date.strftime('%Y'),
             self.date.strftime('%m'),
             self.date.strftime('%d'),
-            str(self.hour),
-            str(self.minute),
-            self.location,
+            str(self.start_hour),
+            str(self.start_minute),
+            str(self.end_hour),
+            str(self.end_minute),
+            str(self.location),
             self.id
         )
         cursor.execute(sql, values)
@@ -657,6 +745,7 @@ class WeekView(Gtk.Box):
 
         self.parent.previous_button.connect('clicked', self.decrease)
         self.parent.next_button.connect('clicked', self.increase)
+        self.parent.this_week_button.connect('clicked', self.this_week)
 
         self.grid = Gtk.Grid(
             column_spacing=5,
@@ -674,6 +763,11 @@ class WeekView(Gtk.Box):
 
     def decrease(self, *args):
         self.current_week.decrease()
+        self.add_days()
+        self.update_gui()
+
+    def this_week(self, *args):
+        self.current_week.set_date(date.today())
         self.add_days()
         self.update_gui()
 
@@ -708,16 +802,28 @@ class WeekView(Gtk.Box):
         for day in range(0, 7):
             for hour in range(0, 23):
                 calendar_hour = CalendarHour(first_date, hour, self)
+                calendar_hour.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+                calendar_hour.connect('button-press-event', self.hour_click)
                 calendar_hour.date = first_date
                 self.grid.attach(calendar_hour, day, hour, 1, 1)
             first_date = first_date + self.one_day
 
+    def hour_click(self, calendar_hour, *args):
+        if not calendar_hour.is_blocked:
+            event = Event()
+            event.date = calendar_hour.date
+            event.start_hour = calendar_hour.hour
+            event.start_minute = 0
+            event.end_hour = calendar_hour.hour + 1
+            event.end_minute = 0
+            EventEditor(event, calendar_hour)
     def initial_scroll(self, *args):
         if self.is_new and self.scroller.is_initialized():
             self.scroller.scroll_to(8 * 45 - 5, fast=True)
             self.is_new = False
 
     def update_gui(self):
+        self.update_days()
         self.grid.show_all()
         self.parent.week_label.set_text(self.current_week.get_text())
         for calendar_hour in self.grid.get_children():
@@ -986,6 +1092,8 @@ class FlexView(Gtk.Box):
         self.parent.month_dropdown.set_active(self.current_month.month - 1)
         self.prevent_default = False
 
+        for calendar_day in self.grid.get_children():
+            calendar_day.refresh_events()
         self.parent.show_all()
 
 
@@ -1010,6 +1118,7 @@ class CalendarWindow(Gtk.Window):
 
     def set_view(self, view):
         self.stack.set_visible_child_name(view)
+
         for widget in self.toolbar.get_children():
             self.toolbar.remove(widget)
 
@@ -1022,6 +1131,7 @@ class CalendarWindow(Gtk.Window):
 
         self.current_view.initial_scroll()
         self.current_view.update_days()
+        self.current_view.update_gui()
         self.toolbar.show_all()
 
     def __init__(self):
@@ -1072,6 +1182,7 @@ class CalendarWindow(Gtk.Window):
 
         # Today button
         self.today_button = Gtk.Button('Today')
+        self.this_week_button = Gtk.Button('Today')
         self.flex_box.pack_start(self.today_button, False, False, 0)
 
         # Week arrow left
@@ -1084,7 +1195,9 @@ class CalendarWindow(Gtk.Window):
         self.next_button = Gtk.Button()
         right_arrow = Gtk.Arrow(Gtk.ArrowType.RIGHT, Gtk.ShadowType.NONE)
         self.next_button.add(right_arrow)
-        self.week_box.pack_start(self.next_button, False, False, 10)
+        self.week_box.pack_start(self.next_button, False, False, 0)
+
+        self.week_box.pack_start(self.this_week_button, False, False, 10)
 
         # Week label
         self.week_label = Gtk.Label()
@@ -1104,6 +1217,13 @@ class CalendarWindow(Gtk.Window):
         # Toolbar
         self.toolbar.add(self.week_box)
         box.pack_start(self.toolbar, True, True, 0)
+
+        # File button
+        #file_button = Gtk.Button.new_from_stock(Gtk.STOCK_ADD)
+        file_button = Gtk.Button.new_from_icon_name('list-add', Gtk.IconSize.MENU)
+        file_button.connect('clicked', self.file_button)
+        box.pack_start(file_button, False, False, 10)
+
         box.pack_start(event_box, False, False, 0)
         self.app_container.pack_start(box, False, True, 10)
 
@@ -1134,6 +1254,40 @@ class CalendarWindow(Gtk.Window):
 
         self.add(self.app_container)
         self.show_all()
+
+    def file_button(self, *args):
+        dialog = Gtk.FileChooserDialog("Please choose a file", self,
+            Gtk.FileChooserAction.OPEN,
+            (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_OPEN, Gtk.ResponseType.OK)
+        )
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            self.open_file(dialog.get_filename())
+        dialog.destroy()
+
+    def open_file(self, file_path):
+        with open(file_path) as f:
+            data = f.read()
+        cal = Calendar.from_ical(data)
+        for component in cal.walk():
+            if component.name == 'VEVENT':
+                name = component.get('summary')
+                start = component.get('dtstart').dt
+                end = component.get('dtend').dt
+                location = component.get('location')
+                event = Event()
+                event.name = name
+                event.location = location
+                event.year = start.year
+                event.month = start.month
+                event.day = start.day
+                event.start_hour = int(start.strftime('%H'))
+                event.start_minute = int(start.strftime('%M'))
+                event.end_hour = int(end.strftime('%H'))
+                event.end_minute = int(end.strftime('%M'))
+                event.save()
+                self.current_view.update_gui()
 
     def set_day_labels(self, labels):
         for widget in self.days_grid:
