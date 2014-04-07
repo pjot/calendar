@@ -98,9 +98,42 @@ class EventEditor:
 
         # Time field
         grid.attach(Gtk.Label('Time', xalign=1), 0, 2, 1, 1)
-        self.time_entry = Gtk.Entry()
-        self.time_entry.set_text(self.event.time)
-        grid.attach(self.time_entry, 1, 2, 1, 1)
+
+        time_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+
+        # Hours
+        hour_store = Gtk.ListStore(int, str)
+        for hour in range(0, 23):
+            padded = str(hour)
+            if hour < 10:
+                padded = '0' + padded
+            hour_store.append([hour, padded])
+        self.hour_dropdown = Gtk.ComboBox.new_with_model(hour_store)
+        renderer_text = Gtk.CellRendererText()
+        self.hour_dropdown.pack_start(renderer_text, True)
+        self.hour_dropdown.add_attribute(renderer_text, 'text', 1)
+        self.hour_dropdown.set_property('has-frame', False)
+        self.hour_dropdown.set_active(self.event.hour)
+        time_box.add(self.hour_dropdown)
+
+        time_box.pack_start(Gtk.Label(':'), False, False, 5)
+
+        # Minutes
+        minute_store = Gtk.ListStore(int, str)
+        for minute in range(0, 59):
+            padded = str(minute)
+            if minute < 10:
+                padded = '0' + padded
+            minute_store.append([minute, padded])
+        self.minute_dropdown = Gtk.ComboBox.new_with_model(minute_store)
+        renderer_text = Gtk.CellRendererText()
+        self.minute_dropdown.pack_start(renderer_text, True)
+        self.minute_dropdown.add_attribute(renderer_text, 'text', 1)
+        self.minute_dropdown.set_property('has-frame', False)
+        self.minute_dropdown.set_active(self.event.minute)
+        time_box.add(self.minute_dropdown)
+
+        grid.attach(time_box, 1, 2, 1, 1)
 
         # Location field
         grid.attach(Gtk.Label('Location', xalign=1), 0, 3, 1, 1)
@@ -142,10 +175,17 @@ class EventEditor:
         event.location = self.location_entry.get_text()
         date = self.date_entry.get_text()
         event.date = datetime.strptime(date, '%Y-%m-%d').date()
-        event.time = self.time_entry.get_text()
-        time_parts = event.time.split(':')
-        event.hour = time_parts[0]
-        event.minute = time_parts[1]
+
+        iterator = self.hour_dropdown.get_active_iter()
+        model = self.hour_dropdown.get_model()
+        # 0 is the id, 1 is the name
+        event.hour = model[iterator][0]
+
+        iterator = self.minute_dropdown.get_active_iter()
+        model = self.minute_dropdown.get_model()
+        # 0 is the id, 1 is the name
+        event.minute = model[iterator][0]
+
         event.save()
         self.calendar_day.add_event(event)
         self.calendar_day.refresh_events()
@@ -202,9 +242,7 @@ class CalendarHour(CalendarDisplay):
         self.hour = hour
         self.parent = parent
 
-        self.events = set()
-        for event in Event.get_by_hour(date.year, date.month, date.day, hour):
-            self.add_event(event)
+        self.set_events()
 
         self.main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.label = Gtk.Label()
@@ -220,6 +258,11 @@ class CalendarHour(CalendarDisplay):
         self.draw()
         self.refresh_events()
 
+    def set_events(self):
+        self.events = set()
+        for event in Event.get_by_hour(self.date.year, self.date.month, self.date.day, self.hour):
+            self.add_event(event)
+
     def refresh_events(self):
         '''
         Refresh the events in the view
@@ -228,6 +271,7 @@ class CalendarHour(CalendarDisplay):
         for widget in self.grid.get_children():
             widget.destroy()
         # Re-add them
+        self.set_events()
         for i, event in enumerate(self.events):
             area = Gtk.DrawingArea()
             area.set_size_request(15, 15)
@@ -449,7 +493,6 @@ class Event:
         event.minute = int(row[6])
         event.is_saved = True
         event.date = date(event.year, event.month, event.day)
-        event.time = str(event.hour) + ':' + str(event.minute)
         return event
 
     @staticmethod
@@ -673,6 +716,8 @@ class WeekView(Gtk.Box):
     def update_gui(self):
         self.grid.show_all()
         self.parent.week_label.set_text(self.current_week.get_text())
+        for calendar_hour in self.grid.get_children():
+            calendar_hour.refresh_events()
 
 
 class Scroller(Gtk.ScrolledWindow):
