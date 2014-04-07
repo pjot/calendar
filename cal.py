@@ -596,10 +596,14 @@ class Event:
 
 
 class WeekView(Gtk.Box):
+    days = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')
+
     def __init__(self, parent):
         Gtk.Box.__init__(self)
         self.parent = parent
         self.is_new = True
+
+        self.one_day = timedelta(1)
 
         self.scroller = Scroller()
         self.scroller.set_min_content_height(40)
@@ -631,12 +635,24 @@ class WeekView(Gtk.Box):
         self.add_days()
         self.update_gui()
 
-    def add_days(self):
+    def update_days(self):
+        first_date = self.get_first_date()
+        days = []
+        for day in range(0, 7):
+            days.append(self.days[day] + ' ' + first_date.strftime('%d'))
+            first_date = first_date + self.one_day
+        self.parent.set_day_labels(days)
+
+    def get_first_date(self):
         first_date = self.current_week.date
 
-        one_day = timedelta(1)
         while first_date.weekday() != 0:
-            first_date = first_date - one_day
+            first_date = first_date - self.one_day
+
+        return first_date
+
+    def add_days(self):
+        first_date = self.get_first_date()
 
         for widget in self.grid.get_children():
             widget.destroy()
@@ -647,7 +663,7 @@ class WeekView(Gtk.Box):
                 calendar_hour = CalendarHour(first_date, hour, self)
                 calendar_hour.date = first_date
                 self.grid.attach(calendar_hour, day, hour, 1, 1)
-            first_date = first_date + one_day
+            first_date = first_date + self.one_day
 
     def initial_scroll(self, *args):
         if self.is_new and self.scroller.is_initialized():
@@ -694,6 +710,7 @@ class Scroller(Gtk.ScrolledWindow):
 
 
 class FlexView(Gtk.Box):
+    days = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')
 
     def __init__(self, parent):
         '''
@@ -812,6 +829,9 @@ class FlexView(Gtk.Box):
             scroll_top = day_in_year * 85 - 20
             self.scroller.scroll_to(scroll_top, fast=True)
             self.is_new = False
+
+    def update_days(self):
+        self.parent.set_day_labels(self.days)
 
     def scroll_to(self, to_date):
         '''
@@ -944,11 +964,13 @@ class CalendarWindow(Gtk.Window):
         for widget in self.toolbar.get_children():
             self.toolbar.remove(widget)
         if view == 'week':
+            self.current_view = self.week_view
             self.toolbar.add(self.week_box)
-            self.week_view.initial_scroll()
         else:
+            self.current_view = self.flex_view
             self.toolbar.add(self.flex_box)
-            self.flex_view.initial_scroll()
+        self.current_view.initial_scroll()
+        self.current_view.update_days()
         self.toolbar.show_all()
 
     def __init__(self):
@@ -1029,28 +1051,23 @@ class CalendarWindow(Gtk.Window):
         event_box.connect('button-press-event', self.switcher_click)
         event_box.add(self.stack_switcher)
 
+        # Toolbar
         self.toolbar.add(self.week_box)
         box.pack_start(self.toolbar, True, True, 0)
         box.pack_start(event_box, False, False, 0)
         self.app_container.pack_start(box, False, True, 10)
 
+        # Day names labels
+        self.days_grid = Gtk.Grid()
+        self.days_grid.set_column_spacing(5)
+        self.days_grid.set_row_spacing(0)
+        self.days_grid.set_column_homogeneous(True)
+        self.days_grid.set_margin_right(15)
+        self.app_container.pack_start(self.days_grid, False, True, 5)
+
+        # Separator
         separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         self.app_container.pack_start(separator, False, False, 10)
-
-        # Day names labels
-        days_grid = Gtk.Grid()
-        days_grid.set_column_spacing(5)
-        days_grid.set_row_spacing(0)
-        days_grid.set_column_homogeneous(True)
-        days_grid.set_margin_right(15)
-        # Add days labels
-        for x, day in enumerate(self.days):
-            label = Gtk.Label()
-            label.set_text(day)
-            label.set_vexpand(False)
-            label.set_hexpand(False)
-            days_grid.attach(label, x + 1, 0, 1, 1)
-        self.app_container.pack_start(days_grid, False, True, 5)
 
         # Add views
         self.week_view = WeekView(self)
@@ -1059,11 +1076,25 @@ class CalendarWindow(Gtk.Window):
         self.flex_view = FlexView(self)
         self.stack.add_titled(self.flex_view, 'flex', 'Flex')
 
+        self.current_view = self.week_view
+        self.current_view.update_days()
+
         self.app_container.pack_start(self.stack, False, True, 5)
 
         self.add(self.app_container)
         self.show_all()
 
+    def set_day_labels(self, labels):
+        for widget in self.days_grid:
+            widget.destroy()
+
+        for x, day in enumerate(labels):
+            label = Gtk.Label()
+            label.set_text(day)
+            label.set_vexpand(False)
+            label.set_hexpand(False)
+            self.days_grid.attach(label, x + 1, 0, 1, 1)
+        self.days_grid.show_all()
 
 win = CalendarWindow()
 win.connect("delete-event", Gtk.main_quit)
