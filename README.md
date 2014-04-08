@@ -8,7 +8,7 @@ This is a desktop calendar application inspired by gnome-calendar and the Androi
 The application has two main views: Week view and Flex view.
 
 ##Week view
-The Week view is you regular view of a week, with the days in columns. It looks like this:
+The Week view is your regular view of a week, with the days in columns. It looks like this:
 ![alt text](https://github.com/pjot/calendar/raw/master/images/week_view.png)
 
 * Clicking the boxes will eventually bring up the Create Event view
