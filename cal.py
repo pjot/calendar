@@ -1016,7 +1016,10 @@ class CalendarWindow(Gtk.Window):
 
         self.config = Config(self.CONFIG_DIR)
 
-        self.set_icon_from_file('images/evolution-calendar.svg')
+        self.set_icon_from_file(os.path.join(
+            os.path.dirname(os.path.realpath(__file__)),
+            'images/evolution-calendar.svg'
+        ))
         self.set_title('Calendar')
         self.set_border_width(10)
         self.set_default_size(800, 600)
@@ -1269,7 +1272,10 @@ class Google:
             parents=[tools.argparser]
         )
         flags = arg_parser.parse_args([])
-        self.CLIENT_SECRETS = 'client_secrets.json'
+        self.CLIENT_SECRETS = os.path.join(
+                os.path.dirname(os.path.realpath(__file__)),
+                'client_secrets.json'
+        )
         self.FLOW = client.flow_from_clientsecrets(
             self.CLIENT_SECRETS,
             scope=[
