@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8' />
+    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+    <meta name="description" content="Calendar : Desktop Calendar Application" />
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+
+    <title>Calendar</title>
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="forkme_banner" href="https://github.com/pjot/calendar">View on GitHub</a>
+
+          <h1 id="project_title">Calendar</h1>
+          <h2 id="project_tagline">Desktop Calendar Application</h2>
+
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/pjot/calendar/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/pjot/calendar/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="main_content" class="inner">
+        <h2>
+<a name="desktop-calendar-written-in-python" class="anchor" href="#desktop-calendar-written-in-python"><span class="octicon octicon-link"></span></a>Desktop Calendar written in Python</h2>
+
+<p>To run it just do ./calendar in the repo. I'm not sure which packages it depends on yet.</p>
+
+<p>This is a desktop calendar application inspired by gnome-calendar and the Android stock calendar app. I've been using Thunderbird with Lightning as my desktop calendar for ages, but I've always wanted something prettier so started writing this. As of right now, most of it is broken but the main features are already visible.</p>
+
+<p>The application has two main views: Week view and Flex view.</p>
+
+<h2>
+<a name="week-view" class="anchor" href="#week-view"><span class="octicon octicon-link"></span></a>Week view</h2>
+
+<p>The Week view is you regular view of a week, with the days in columns. It looks like this:
+<img src="https://github.com/pjot/calendar/raw/master/images/week_view.png" alt="alt text"></p>
+
+<ul>
+<li>Clicking the boxes will eventually bring up the Create Event view</li>
+<li>The view is scrollable and the default view is centered around the business hours (which also have a different color than the other hours)</li>
+</ul><h2>
+<a name="flex-view" class="anchor" href="#flex-view"><span class="octicon octicon-link"></span></a>Flex view</h2>
+
+<p>The Flex view is my version of the view in the Android calendar app which consists of one box per day in a long scrollable container. It colors the months in different colors, as well as highlighting the weekends. 
+<img src="https://github.com/pjot/calendar/raw/master/images/flex_view.png" alt="alt text"></p>
+
+<ul>
+<li>Clicking a box brings up the Create Event view</li>
+<li>Clicking an event (the small green squares) brings up en Edit Event view</li>
+<li>At startup the view is centered around today (which is highlighted in green)</li>
+</ul><h2>
+<a name="toolbar" class="anchor" href="#toolbar"><span class="octicon octicon-link"></span></a>Toolbar</h2>
+
+<p>Certain elements in the toolbar are common for the views and some change:</p>
+
+<ul>
+<li>Today - Moves the focus of the view to today</li>
+<li>Plus - Imports a .ical file</li>
+<li>Sync/Refresh - Imports all events from the selected Google Calendar</li>
+<li>Settings - Opens the settings dialog</li>
+</ul>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">Calendar maintained by <a href="https://github.com/pjot">pjot</a></p>
+        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+    
+
+  </body>
+</html>
