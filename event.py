@@ -301,6 +301,8 @@ class Event:
         '''
         Persists the Event in the database.
         '''
+        if self.location is None:
+            self.location = ''
         if self.is_saved:
             self._update()
         else:
