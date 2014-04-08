@@ -1309,7 +1309,6 @@ class Google:
             if 'location' in item:
                 event.location = item['location']
 
-            event.echo()
             event.save()
             items = items + 1
         message = 'Successfully imported {} items'.format(items)
