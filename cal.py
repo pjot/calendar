@@ -8,6 +8,7 @@ from oauth2client import file
 from oauth2client import client
 from oauth2client import tools
 from event import Event
+from config import Config
 
 import math
 import sys
@@ -15,7 +16,6 @@ import getopt
 import argparse
 import httplib2
 import os
-import pickle
 
 
 class Week:
@@ -103,6 +103,7 @@ class SettingsEditor:
         # Sync with Google?
         grid.attach(Gtk.Label('Google Syncing:', xalign=1), 0, 0, 1, 1)
         self.google_sync = Gtk.Switch(hexpand=False)
+        self.google_sync.connect('notify::active', self.toggle_google_button)
         if self.parent.config.get('google_sync'):
             self.google_sync.set_active(True)
         box = Gtk.Box()
@@ -138,8 +139,15 @@ class SettingsEditor:
         self.window.add(app_container)
         self.window.show_all()
 
+    def toggle_google_button(self, switch, *args):
+        if switch.get_active():
+            self.parent.google_button.set_sensitive(True)
+        else:
+            self.parent.google_button.set_sensitive(False)
+
     def close(self, *args):
         self.window.destroy()
+        self.parent.toggle_google_button()
 
     def save(self, *args):
         config = self.parent.config
@@ -147,6 +155,7 @@ class SettingsEditor:
         config.set('calendar', self.calendar_entry.get_text())
         config.save()
         self.window.destroy()
+        self.parent.toggle_google_button()
 
 
 class EventEditor:
@@ -945,26 +954,6 @@ class FlexView(Gtk.Box):
         self.parent.show_all()
 
 
-class Config:
-
-    def __init__(self, config_path):
-        self.config = {}
-        self.config_file = os.path.join(config_path, 'config.p')
-        if os.path.isfile(self.config_file):
-            with open(self.config_file, 'r') as f:
-                self.config = pickle.load(f)
-
-    def get(self, value):
-        return self.config.get(value, None)
-
-    def set(self, key, value):
-        self.config[key] = value
-
-    def save(self):
-        with open(self.config_file, 'w+') as f:
-            pickle.dump(self.config, f)
-
-
 class CalendarWindow(Gtk.Window):
     days = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')
 
@@ -972,40 +961,6 @@ class CalendarWindow(Gtk.Window):
     END_YEAR = 2020
 
     CONFIG_DIR = '.config/pjot-calendar'
-
-    def switcher_click(self, __, event):
-        '''
-        Somewhat hacky way of catching clicks in the stack switcher by
-        comparing the click's x to the middle of the switcher. The first half
-        of the switcher is the Week button and the second half is the Flex
-        button.
-        '''
-        allocation = self.stack_switcher.get_allocation()
-        if allocation.width / 2 < event.x:
-            self.set_view('flex')
-        else:
-            self.set_view('week')
-
-    def set_view(self, view):
-        self.stack.set_visible_child_name(view)
-
-        for widget in self.toolbar.get_children():
-            self.toolbar.remove(widget)
-
-        if view == 'week':
-            self.current_view = self.week_view
-            self.toolbar.add(self.week_box)
-        else:
-            self.current_view = self.flex_view
-            self.toolbar.add(self.flex_box)
-
-        self.current_view.initial_scroll()
-        self.current_view.update_days()
-        self.current_view.update_gui()
-        self.toolbar.show_all()
-
-    def show_message(self, message):
-        self.message_bar.show_message(message)
 
     def __init__(self):
         '''
@@ -1112,15 +1067,23 @@ class CalendarWindow(Gtk.Window):
         file_button.connect('clicked', self.file_button)
         box.pack_start(file_button, False, False, 0)
 
+        # Google button
+        self.google_button = Gtk.Button.new_from_icon_name(
+            Gtk.STOCK_REFRESH, Gtk.IconSize.MENU
+        )
+        self.google_button.connect('clicked', self.import_from_google)
+        box.pack_start(self.google_button, False, False, 0)
+
         # Settings button
         settings_button = Gtk.Button.new_from_icon_name(
             Gtk.STOCK_PREFERENCES, Gtk.IconSize.MENU
         )
+        settings_button.set_margin_right(10)
         settings_button.connect('clicked', self.settings_editor)
-        box.pack_start(settings_button, False, False, 10)
+        box.pack_start(settings_button, False, False, 0)
 
         box.pack_start(event_box, False, False, 0)
-        self.app_container.pack_start(box, False, True, 10)
+        self.app_container.pack_start(box, False, True, 0)
 
         # Day names labels
         self.days_grid = Gtk.Grid(
@@ -1143,16 +1106,56 @@ class CalendarWindow(Gtk.Window):
 
         self.app_container.pack_start(self.stack, False, True, 5)
 
-        b = Gtk.Button('google')
-        b.connect('clicked', self.google)
-        self.app_container.add(b)
-
         # Message bar
         self.app_container.pack_start(self.message_bar, False, True, 5)
 
         self.add(self.app_container)
         self.show_all()
         self.message_bar.hide()
+
+    def toggle_google_button(self):
+        if not self.config.get('google_sync'):
+            self.google_button.set_sensitive(False)
+        else:
+            self.google_button.set_sensitive(True)
+
+    def show_all(self, *args):
+        Gtk.Window.show_all(self)
+        self.toggle_google_button()
+
+    def show_message(self, message):
+        self.message_bar.show_message(message)
+
+    def switcher_click(self, __, event):
+        '''
+        Somewhat hacky way of catching clicks in the stack switcher by
+        comparing the click's x to the middle of the switcher. The first half
+        of the switcher is the Week button and the second half is the Flex
+        button.
+        '''
+        allocation = self.stack_switcher.get_allocation()
+        if allocation.width / 2 < event.x:
+            self.set_view('flex')
+        else:
+            self.set_view('week')
+
+    def set_view(self, view):
+        self.stack.set_visible_child_name(view)
+
+        for widget in self.toolbar.get_children():
+            self.toolbar.remove(widget)
+
+        if view == 'week':
+            self.current_view = self.week_view
+            self.toolbar.add(self.week_box)
+        else:
+            self.current_view = self.flex_view
+            self.toolbar.add(self.flex_box)
+
+        self.current_view.initial_scroll()
+        self.current_view.update_days()
+        self.current_view.update_gui()
+        self.toolbar.show_all()
 
     def settings_editor(self, *args):
         SettingsEditor(self)
@@ -1162,7 +1165,7 @@ class CalendarWindow(Gtk.Window):
             self.google_client = Google(self)
         return self.google_client
 
-    def google(self, *args):
+    def import_from_google(self, *args):
         google = self.get_google_client()
         google.import_events()
 
