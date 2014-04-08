@@ -17,7 +17,7 @@ import getopt
 import argparse
 import httplib2
 import os
-import json
+import pickle
 
 
 class Week:
@@ -81,6 +81,74 @@ class Month:
             return self.year == day.date.year and self.month == day.date.month
         if isinstance(day, Month):
             return self.year == day.year and self.month == day.month
+
+
+class SettingsEditor:
+    def __init__(self, parent):
+        self.parent = parent
+        self.window = Gtk.Window()
+
+        app_container = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            margin_left=10,
+            margin_right=10,
+            hexpand=True,
+            vexpand=True
+        )
+
+        # Form grid
+        grid = Gtk.Grid(
+            row_spacing=5,
+            column_spacing=5,
+        )
+
+        # Sync with Google?
+        grid.attach(Gtk.Label('Google Syncing:', xalign=1), 0, 0, 1, 1)
+        self.google_sync = Gtk.Switch(hexpand=False)
+        if self.parent.config.get('google_sync'):
+            self.google_sync.set_active(True)
+        box = Gtk.Box()
+        box.add(self.google_sync)
+        grid.attach(box, 1, 0, 1, 1)
+
+        # Fetch calendars
+        grid.attach(Gtk.Label('Calendar:', xalign=1), 0, 1, 1, 1)
+        self.calendar_entry = Gtk.Entry()
+        if self.parent.config.get('calendar'):
+            self.calendar_entry.set_text(self.parent.config.get('calendar'))
+        grid.attach(self.calendar_entry, 1, 1, 1, 1)
+
+        # Button box
+        buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+
+        # Filler
+        buttons.pack_start(Gtk.Label(), True, True, 10)
+
+        # Cancel button
+        button = Gtk.Button('Cancel')
+        button.connect('clicked', self.close)
+        buttons.pack_start(button, False, True, 10)
+
+        # Save button
+        button = Gtk.Button('Save')
+        button.connect('clicked', self.save)
+        buttons.pack_start(button, False, True, 0)
+
+        app_container.pack_start(grid, False, False, 10)
+        app_container.pack_start(buttons, False, False, 10)
+
+        self.window.add(app_container)
+        self.window.show_all()
+
+    def close(self, *args):
+        self.window.destroy()
+
+    def save(self, *args):
+        config = self.parent.config
+        config.set('google_sync', self.google_sync.get_active())
+        config.set('calendar', self.calendar_entry.get_text())
+        config.save()
+        self.window.destroy()
 
 
 class EventEditor:
@@ -239,8 +307,9 @@ class EventEditor:
         model = self.end_minute_dropdown.get_model()
         event.end_minute = model[iterator][0]
 
-        google = self.initiator.parent.parent.get_google_client()
-        google.export_event(event)
+        if self.initiator.parent.parent.config.get('google_sync'):
+            google = self.initiator.parent.parent.get_google_client()
+            google.export_event(event)
         event.save()
 
         self.initiator.add_event(event)
@@ -1181,6 +1250,26 @@ class FlexView(Gtk.Box):
         self.parent.show_all()
 
 
+class Config:
+
+    def __init__(self, config_path):
+        self.config = {}
+        self.config_file = os.path.join(config_path, 'config.p')
+        if os.path.isfile(self.config_file):
+            with open(self.config_file, 'r') as f:
+                self.config = pickle.load(f)
+
+    def get(self, value):
+        return self.config.get(value, None)
+
+    def set(self, key, value):
+        self.config[key] = value
+
+    def save(self):
+        with open(self.config_file, 'w+') as f:
+            pickle.dump(self.config, f)
+
+
 class CalendarWindow(Gtk.Window):
     days = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')
 
@@ -1237,6 +1326,8 @@ class CalendarWindow(Gtk.Window):
             os.makedirs(self.CONFIG_DIR)
 
         Event.CONFIG_DIR = self.CONFIG_DIR
+
+        self.config = Config(self.CONFIG_DIR)
 
         self.set_icon_from_file('images/evolution-calendar.svg')
         self.set_title('Calendar')
@@ -1330,6 +1421,7 @@ class CalendarWindow(Gtk.Window):
         settings_button = Gtk.Button.new_from_icon_name(
             Gtk.STOCK_PREFERENCES, Gtk.IconSize.MENU
         )
+        settings_button.connect('clicked', self.settings_editor)
         box.pack_start(settings_button, False, False, 10)
 
         box.pack_start(event_box, False, False, 0)
@@ -1366,6 +1458,9 @@ class CalendarWindow(Gtk.Window):
         self.add(self.app_container)
         self.show_all()
         self.message_bar.hide()
+
+    def settings_editor(self, *args):
+        SettingsEditor(self)
 
     def get_google_client(self):
         if self.google_client is None:
@@ -1460,7 +1555,7 @@ class Google:
 
         calendars = self.service.calendarList().list().execute()
         for item in calendars['items']:
-            if item['summary'] == 'Peter':
+            if item['summary'] == self.parent.config.get('calendar'):
                 self.calendar_id = item['id']
 
     def export_event(self, event):
@@ -1485,8 +1580,6 @@ class Google:
 
         items = 0
         for item in events['items']:
-            print json.dumps(item, indent=4)
-
             event = Event.get_by_google_id(item['id'])
 
             if 'dateTime' in item['start']:
