@@ -2,12 +2,22 @@
 
 from gi.repository import Gtk, Gdk
 from datetime import date, timedelta, datetime
+from dateutil import parser
 from threading import Timer
-from icalendar import Calendar, Event
+from icalendar import Calendar
+from apiclient import discovery
+from oauth2client import file
+from oauth2client import client
+from oauth2client import tools
+
 import math
 import sqlite3
 import sys
 import getopt
+import argparse
+import httplib2
+import os
+import json
 
 
 class Week:
@@ -96,7 +106,12 @@ class EventEditor:
         )
 
         # Form grid
-        grid = Gtk.Grid(row_spacing=5, column_spacing=5, hexpand=True, vexpand=True)
+        grid = Gtk.Grid(
+            row_spacing=5,
+            column_spacing=5,
+            hexpand=True,
+            vexpand=True
+        )
 
         # Name field
         grid.attach(Gtk.Label('Name:', xalign=1), 0, 0, 1, 1)
@@ -117,7 +132,7 @@ class EventEditor:
         # Hours
         renderer_text = Gtk.CellRendererText()
         hour_store = Gtk.ListStore(int, str)
-        for hour in range(0, 23):
+        for hour in range(0, 24):
             padded = str(hour)
             if hour < 10:
                 padded = '0' + padded
@@ -143,7 +158,7 @@ class EventEditor:
 
         # Minutes
         minute_store = Gtk.ListStore(int, str)
-        for minute in range(0, 59):
+        for minute in range(0, 60):
             padded = str(minute)
             if minute < 10:
                 padded = '0' + padded
@@ -224,7 +239,10 @@ class EventEditor:
         model = self.end_minute_dropdown.get_model()
         event.end_minute = model[iterator][0]
 
+        google = self.initiator.parent.parent.get_google_client()
+        google.export_event(event)
         event.save()
+
         self.initiator.add_event(event)
         self.initiator.refresh_events()
         # Give the click event back to the Initiator
@@ -490,6 +508,7 @@ class CalendarDay(CalendarDisplay):
 class Event:
     is_connected = False
     connection = None
+    CONFIG_DIR = None
 
     def __init__(self):
         '''
@@ -500,6 +519,7 @@ class Event:
         self.name = ''
         self.time = ''
         self.id = ''
+        self.google_id = ''
         self.location = ''
         now = datetime.now()
         self.start_hour = now.hour
@@ -509,12 +529,49 @@ class Event:
         self.end_minute = now.minute
         self.date = None
 
+    def pad_zero(self, value):
+        return_value = str(value)
+        if int(value) < 10:
+            return_value = '0' + return_value
+        return return_value
+
+    def to_google(self):
+        if isinstance(self.date, date):
+            self.year = self.date.strftime('%Y')
+            self.month = self.date.strftime('%m')
+            self.day = self.date.strftime('%d')
+        start_string = '{}-{}-{}T{}:{}:00.000+01:00'.format(
+            self.year,
+            self.month,
+            self.day,
+            self.pad_zero(self.start_hour),
+            self.pad_zero(self.start_minute)
+        )
+        end_string = '{}-{}-{}T{}:{}:00.000+01:00'.format(
+            self.year,
+            self.month,
+            self.day,
+            self.pad_zero(self.end_hour),
+            self.pad_zero(self.end_minute)
+        )
+        return {
+            'start': {
+                'dateTime': start_string
+            },
+            'end': {
+                'dateTime': end_string
+            },
+            'location': self.location,
+            'summary': self.name
+        }
+
     def echo(self):
         '''
         Prints the details of this event. Useful for debugging.
         '''
         print 'Event:'
         print 'ID:', self.id
+        print 'Google ID:', self.google_id
         print 'Name:', self.name
         print 'Location:', self.location
         print 'Start Hour:', self.start_hour
@@ -524,6 +581,16 @@ class Event:
         print 'Year:', self.year
         print 'Month:', self.month
         print 'Day:', self.day
+
+    @staticmethod
+    def get_by_google_id(id):
+        cursor = Event.get_connection().cursor()
+        sql = 'select id from events where google_id = ?'
+        cursor.execute(sql, (id,))
+        row = cursor.fetchone()
+        if row is None:
+            return Event()
+        return Event.get_by_id(row[0])
 
     @staticmethod
     def get_by_id(id):
@@ -545,7 +612,8 @@ class Event:
                 start_hour, \
                 start_minute, \
                 end_hour, \
-                end_minute \
+                end_minute, \
+                google_id \
             from events where id = ?'
         cursor.execute(sql, (str(id),))
         row = cursor.fetchone()
@@ -561,6 +629,7 @@ class Event:
         event.start_minute = int(row[6])
         event.end_hour = int(row[7])
         event.end_minute = int(row[8])
+        event.google_id = str(row[9])
         event.is_saved = True
         event.date = date(event.year, event.month, event.day)
         return event
@@ -623,7 +692,8 @@ class Event:
         '''
         Connect to the database and create the schema if it does not exist.
         '''
-        Event.connection = sqlite3.connect('test.db')
+        db_file = os.path.join(Event.CONFIG_DIR, 'events.db')
+        Event.connection = sqlite3.connect(db_file)
         Event.connection.text_factory = str
         Event.is_connected = True
         sql = 'create table if not exists \
@@ -637,7 +707,8 @@ class Event:
                 start_hour int, \
                 start_minute int, \
                 end_hour int, \
-                end_minute int \
+                end_minute int, \
+                google_id varchar(255) \
             )'
         Event.connection.cursor().execute(sql)
 
@@ -672,20 +743,22 @@ class Event:
                     start_hour, \
                     start_minute, \
                     end_hour, \
-                    end_minute \
+                    end_minute, \
+                    google_id \
                 ) \
                 values \
-                (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         values = (
             self.name,
-            self.location,
+            self.location.encode('utf-8'),
             self.year,
             self.month,
             self.day,
             str(self.start_hour),
             str(self.start_minute),
             str(self.end_hour),
-            str(self.end_minute)
+            str(self.end_minute),
+            self.google_id
         )
         cursor.execute(sql, values)
         connection.commit()
@@ -706,7 +779,8 @@ class Event:
                 start_minute = ?, \
                 end_hour = ?, \
                 end_minute = ?, \
-                location = ? \
+                location = ?, \
+                google_id = ? \
                 where id = ?'
         values = (
             self.name,
@@ -717,7 +791,8 @@ class Event:
             str(self.start_minute),
             str(self.end_hour),
             str(self.end_minute),
-            str(self.location),
+            self.location.encode('utf-8'),
+            self.google_id,
             self.id
         )
         cursor.execute(sql, values)
@@ -820,6 +895,7 @@ class WeekView(Gtk.Box):
             event.end_hour = calendar_hour.hour + 1
             event.end_minute = 0
             EventEditor(event, calendar_hour)
+
     def initial_scroll(self, *args):
         if self.is_new and self.scroller.is_initialized():
             self.scroller.scroll_to(8 * 45 - 5, fast=True)
@@ -1111,6 +1187,8 @@ class CalendarWindow(Gtk.Window):
     START_YEAR = 2010
     END_YEAR = 2020
 
+    CONFIG_DIR = '.config/pjot-calendar'
+
     def switcher_click(self, __, event):
         '''
         Somewhat hacky way of catching clicks in the stack switcher by
@@ -1150,6 +1228,15 @@ class CalendarWindow(Gtk.Window):
         Creates a new Window and fills it with the interface
         '''
         Gtk.Window.__init__(self)
+
+        self.CONFIG_DIR = os.path.join(os.getenv('HOME'), self.CONFIG_DIR)
+        self.google_client = None
+
+        # Ensure that a config directory exists
+        if not os.path.isdir(self.CONFIG_DIR):
+            os.makedirs(self.CONFIG_DIR)
+
+        Event.CONFIG_DIR = self.CONFIG_DIR
 
         self.set_icon_from_file('images/evolution-calendar.svg')
         self.set_title('Calendar')
@@ -1233,9 +1320,17 @@ class CalendarWindow(Gtk.Window):
         box.pack_start(self.toolbar, True, True, 0)
 
         # File button
-        file_button = Gtk.Button.new_from_icon_name('list-add', Gtk.IconSize.MENU)
+        file_button = Gtk.Button.new_from_icon_name(
+            'list-add', Gtk.IconSize.MENU
+        )
         file_button.connect('clicked', self.file_button)
-        box.pack_start(file_button, False, False, 10)
+        box.pack_start(file_button, False, False, 0)
+
+        # Settings button
+        settings_button = Gtk.Button.new_from_icon_name(
+            Gtk.STOCK_PREFERENCES, Gtk.IconSize.MENU
+        )
+        box.pack_start(settings_button, False, False, 10)
 
         box.pack_start(event_box, False, False, 0)
         self.app_container.pack_start(box, False, True, 10)
@@ -1249,7 +1344,6 @@ class CalendarWindow(Gtk.Window):
         )
         self.app_container.pack_start(self.days_grid, False, True, 5)
 
-
         # Add views
         self.week_view = WeekView(self)
         self.stack.add_titled(self.week_view, 'week', 'Week')
@@ -1262,6 +1356,10 @@ class CalendarWindow(Gtk.Window):
 
         self.app_container.pack_start(self.stack, False, True, 5)
 
+        b = Gtk.Button('google')
+        b.connect('clicked', self.google)
+        self.app_container.add(b)
+
         # Message bar
         self.app_container.pack_start(self.message_bar, False, True, 5)
 
@@ -1269,17 +1367,31 @@ class CalendarWindow(Gtk.Window):
         self.show_all()
         self.message_bar.hide()
 
+    def get_google_client(self):
+        if self.google_client is None:
+            self.google_client = Google(self)
+        return self.google_client
+
+    def google(self, *args):
+        google = self.get_google_client()
+        google.import_events()
+
     def file_button(self, *args):
-        dialog = Gtk.FileChooserDialog("Please choose a file", self,
+        dialog = Gtk.FileChooserDialog(
+            "Please choose a file",
+            self,
             Gtk.FileChooserAction.OPEN,
-            (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-            Gtk.STOCK_OPEN, Gtk.ResponseType.OK)
+            (
+                Gtk.STOCK_CANCEL,
+                Gtk.ResponseType.CANCEL,
+                Gtk.STOCK_OPEN,
+                Gtk.ResponseType.OK
+            )
         )
         response = dialog.run()
         if response == Gtk.ResponseType.OK:
             self.open_file(dialog.get_filename())
         dialog.destroy()
-
 
     def open_file(self, file_path):
         with open(file_path) as f:
@@ -1314,6 +1426,99 @@ class CalendarWindow(Gtk.Window):
             label.set_text(day)
             self.days_grid.attach(label, x + 1, 0, 1, 1)
         self.days_grid.show_all()
+
+
+class Google:
+    def __init__(self, parent):
+        self.parent = parent
+        arg_parser = argparse.ArgumentParser(
+            description=__doc__,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            parents=[tools.argparser]
+        )
+        flags = arg_parser.parse_args([])
+        self.CLIENT_SECRETS = 'client_secrets.json'
+        self.FLOW = client.flow_from_clientsecrets(
+            self.CLIENT_SECRETS,
+            scope=[
+                'https://www.googleapis.com/auth/calendar',
+                'https://www.googleapis.com/auth/calendar.readonly',
+            ],
+            message=tools.message_if_missing(self.CLIENT_SECRETS)
+        )
+
+        data_file = os.path.join(self.parent.CONFIG_DIR, 'google-calendar.dat')
+        storage = file.Storage(data_file)
+        credentials = storage.get()
+        if credentials is None or credentials.invalid:
+            credentials = tools.run_flow(self.FLOW, storage, flags)
+
+        http = httplib2.Http()
+        http = credentials.authorize(http)
+
+        self.service = discovery.build('calendar', 'v3', http=http)
+
+        calendars = self.service.calendarList().list().execute()
+        for item in calendars['items']:
+            if item['summary'] == 'Peter':
+                self.calendar_id = item['id']
+
+    def export_event(self, event):
+        if event.google_id:
+            self.service.events().update(
+                calendarId=self.calendar_id,
+                eventId=event.google_id,
+                body=event.to_google()
+            ).execute()
+        else:
+            response = self.service.events().insert(
+                calendarId=self.calendar_id,
+                body=event.to_google()
+            ).execute()
+            event.google_id = response['id']
+        return event
+
+    def import_events(self):
+
+        request = self.service.events().list(calendarId=self.calendar_id)
+        events = request.execute()
+
+        items = 0
+        for item in events['items']:
+            print json.dumps(item, indent=4)
+
+            event = Event.get_by_google_id(item['id'])
+
+            if 'dateTime' in item['start']:
+                start_dt = parser.parse(item['start']['dateTime'])
+            else:
+                start_dt = parser.parse(item['start']['date'])
+
+            if 'dateTime' in item['end']:
+                end_dt = parser.parse(item['end']['dateTime'])
+                event.end_hour = end_dt.hour
+                event.end_minute = end_dt.minute
+            else:
+                end_dt = parser.parse(item['end']['date'])
+                event.end_hour = 23
+                event.end_minute = 59
+
+            event.year = start_dt.year
+            event.month = start_dt.month
+            event.day = start_dt.day
+            event.start_hour = start_dt.hour
+            event.start_minute = start_dt.minute
+
+            event.google_id = item['id']
+            event.name = item['summary']
+            if 'location' in item:
+                event.location = item['location']
+
+            event.echo()
+            event.save()
+            items = items + 1
+        message = 'Successfully imported {} items'.format(items)
+        self.parent.show_message(message)
 
 
 class MessageBar(Gtk.EventBox):
