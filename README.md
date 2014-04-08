@@ -22,3 +22,9 @@ The Flex view is my version of the view in the Android calendar app which consis
 * Clicking an event (the small green squares) brings up en Edit Event view
 * At startup the view is centered around today (which is highlighted in green)
 
+## Toolbar
+Certain elements in the toolbar are common for the views and some change:
+* Today - Moves the focus of the view to today
+* Plus - Imports a .ical file
+* Sync/Refresh - Imports all events from the selected Google Calendar
+* Settings - Opens the settings dialog
