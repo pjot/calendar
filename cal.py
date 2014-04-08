@@ -110,18 +110,34 @@ class SettingsEditor:
         box.add(self.google_sync)
         grid.attach(box, 1, 0, 1, 1)
 
-        # Fetch calendars
+        # Calendar name
+        self.calendar_name = self.parent.config.get('calendar_name')
+        self.calendar_id = self.parent.config.get('calendar_id')
+        calendar_box = Gtk.Box()
         grid.attach(Gtk.Label('Calendar:', xalign=1), 0, 1, 1, 1)
-        self.calendar_entry = Gtk.Entry()
-        if self.parent.config.get('calendar'):
-            self.calendar_entry.set_text(self.parent.config.get('calendar'))
-        grid.attach(self.calendar_entry, 1, 1, 1, 1)
+        self.calendar_label = Gtk.Label(self.calendar_name, xalign=0)
+        calendar_box.add(self.calendar_label)
+        grid.attach(calendar_box, 1, 1, 1, 1)
+
+        # Calendar dropdown
+        self.calendar_store = Gtk.ListStore(int, str, str)
+        self.calendar_dropdown = Gtk.ComboBox.new_with_model(self.calendar_store)
+        renderer_text = Gtk.CellRendererText()
+        self.calendar_dropdown.pack_start(renderer_text, True)
+        self.calendar_dropdown.add_attribute(renderer_text, "text", 2)
+        self.calendar_dropdown.connect('changed', self.calendar_change)
+        calendar_box.add(self.calendar_dropdown)
 
         # Button box
         buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
 
         # Filler
         buttons.pack_start(Gtk.Label(), True, True, 10)
+
+        # Fetch button
+        fetch_button = Gtk.Button('Fetch')
+        fetch_button.connect('clicked', self.fetch_calendars)
+        buttons.pack_start(fetch_button, False, True, 0)
 
         # Cancel button
         button = Gtk.Button('Cancel')
@@ -138,6 +154,25 @@ class SettingsEditor:
 
         self.window.add(app_container)
         self.window.show_all()
+        self.calendar_dropdown.hide()
+
+    def fetch_calendars(self, *args):
+        google_client = self.parent.get_google_client()
+        self.calendar_store.clear()
+        calendars = google_client.get_calendars()
+        for i, calendar in enumerate(calendars['items']):
+            self.calendar_store.append([i, calendar['id'], calendar['summary']])
+
+        self.calendar_dropdown.show()
+        self.calendar_label.hide()
+        self.calendar_dropdown.set_active(0)
+
+    def calendar_change(self, combo, *args):
+        iterator = combo.get_active_iter()
+        model = combo.get_model()
+        # 1 is the id, 2 is the name
+        self.calendar_name = model[iterator][2]
+        self.calendar_id = model[iterator][1]
 
     def toggle_google_button(self, switch, *args):
         if switch.get_active():
@@ -152,7 +187,8 @@ class SettingsEditor:
     def save(self, *args):
         config = self.parent.config
         config.set('google_sync', self.google_sync.get_active())
-        config.set('calendar', self.calendar_entry.get_text())
+        config.set('calendar_name', self.calendar_name)
+        config.set('calendar_id', self.calendar_id)
         config.save()
         self.window.destroy()
         self.parent.toggle_google_button()
@@ -316,6 +352,7 @@ class EventEditor:
 
         if self.initiator.parent.parent.config.get('google_sync'):
             google = self.initiator.parent.parent.get_google_client()
+            google.set_calendar_id()
             google.export_event(event)
         event.save()
 
@@ -1167,6 +1204,7 @@ class CalendarWindow(Gtk.Window):
 
     def import_from_google(self, *args):
         google = self.get_google_client()
+        google.set_calendar_id()
         google.import_events()
 
     def file_button(self, *args):
@@ -1252,7 +1290,11 @@ class Google:
 
         self.service = discovery.build('calendar', 'v3', http=http)
 
-        calendars = self.service.calendarList().list().execute()
+    def get_calendars(self):
+        return self.service.calendarList().list().execute()
+
+    def set_calendar_id(self):
+        calendars = self.get_calendars()
         for item in calendars['items']:
             if item['id'] == self.parent.config.get('calendar'):
                 self.calendar_id = item['id']
