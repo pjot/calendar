@@ -1,2 +1,2 @@
 #!/bin/bash
-./cal.py &
+python ./cal.py &
