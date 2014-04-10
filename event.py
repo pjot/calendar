@@ -34,19 +34,19 @@ class Event:
             return_value = '0' + return_value
         return return_value
 
-    def to_google(self):
+    def get_google_object(self):
         if isinstance(self.date, date):
             self.year = self.date.strftime('%Y')
             self.month = self.date.strftime('%m')
             self.day = self.date.strftime('%d')
-        start_string = '{}-{}-{}T{}:{}:00.000+01:00'.format(
+        start_string = '{}-{}-{}T{}:{}:00.000+02:00'.format(
             self.year,
             self.month,
             self.day,
             self.pad_zero(self.start_hour),
             self.pad_zero(self.start_minute)
         )
-        end_string = '{}-{}-{}T{}:{}:00.000+01:00'.format(
+        end_string = '{}-{}-{}T{}:{}:00.000+02:00'.format(
             self.year,
             self.month,
             self.day,
@@ -63,6 +63,16 @@ class Event:
             'location': self.location,
             'summary': self.name
         }
+
+    def googleize(self, event):
+        google_object = self.get_google_object()
+        event['start']['dateTime'] = google_object['start']['dateTime']
+        event['end']['dateTime'] = google_object['end']['dateTime']
+        event['location'] = google_object['location']
+        event['summary'] = google_object['summary']
+
+    def to_google(self):
+        return self.get_google_object()
 
     def echo(self):
         '''

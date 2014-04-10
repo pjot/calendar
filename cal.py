@@ -10,6 +10,7 @@ from oauth2client import tools
 from event import Event
 from config import Config
 
+import time
 import math
 import sys
 import getopt
@@ -1233,9 +1234,10 @@ class CalendarWindow(Gtk.Window):
         cal = Calendar.from_ical(data)
         for component in cal.walk():
             if component.name == 'VEVENT':
+                tz_offset = timedelta(seconds=time.timezone)
                 name = component.get('summary')
-                start = component.get('dtstart').dt
-                end = component.get('dtend').dt
+                start = component.get('dtstart').dt - tz_offset
+                end = component.get('dtend').dt - tz_offset
                 location = component.get('location')
                 event = Event()
                 event.name = name
@@ -1243,10 +1245,14 @@ class CalendarWindow(Gtk.Window):
                 event.year = start.year
                 event.month = start.month
                 event.day = start.day
-                event.start_hour = int(start.strftime('%H'))
+                event.start_hour = int(start.strftime('%H')) + 1
                 event.start_minute = int(start.strftime('%M'))
-                event.end_hour = int(end.strftime('%H'))
+                event.end_hour = int(end.strftime('%H')) + 1
                 event.end_minute = int(end.strftime('%M'))
+                if self.config.get('google_sync'):
+                    google = self.get_google_client()
+                    google.set_calendar_id()
+                    google.export_event(event)
                 event.save()
                 self.show_message('Successfully added event')
                 self.current_view.update_gui()
@@ -1310,10 +1316,15 @@ class Google:
             return event
 
         if event.google_id:
+            e = self.service.events().get(
+                calendarId=self.calendar_id,
+                eventId=event.google_id
+            ).execute()
+            event.googleize(e)
             self.service.events().update(
                 calendarId=self.calendar_id,
                 eventId=event.google_id,
-                body=event.to_google()
+                body=e
             ).execute()
         else:
             response = self.service.events().insert(
