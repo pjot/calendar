@@ -74,6 +74,12 @@ class Event:
     def to_google(self):
         return self.get_google_object()
 
+    def overlaps(self, hour, minute):
+        start = self.start_hour + 100 * self.start_minute
+        end = self.end_hour + 100 * self.end_minute
+        overlap = hour + 100 * minute
+        return start < overlap and overlap < end
+
     def echo(self):
         '''
         Prints the details of this event. Useful for debugging.

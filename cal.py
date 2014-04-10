@@ -122,7 +122,9 @@ class SettingsEditor:
 
         # Calendar dropdown
         self.calendar_store = Gtk.ListStore(int, str, str)
-        self.calendar_dropdown = Gtk.ComboBox.new_with_model(self.calendar_store)
+        self.calendar_dropdown = Gtk.ComboBox.new_with_model(
+            self.calendar_store
+        )
         renderer_text = Gtk.CellRendererText()
         self.calendar_dropdown.pack_start(renderer_text, True)
         self.calendar_dropdown.add_attribute(renderer_text, "text", 2)
@@ -162,7 +164,11 @@ class SettingsEditor:
         self.calendar_store.clear()
         calendars = google_client.get_calendars()
         for i, calendar in enumerate(calendars['items']):
-            self.calendar_store.append([i, calendar['id'], calendar['summary']])
+            self.calendar_store.append([
+                i,
+                calendar['id'],
+                calendar['summary']
+            ])
 
         self.calendar_dropdown.show()
         self.calendar_label.hide()
@@ -270,7 +276,13 @@ class EventEditor:
 
         # Minutes
         minute_store = Gtk.ListStore(int, str)
+        minute_store.append([0, '00'])
+        minute_store.append([15, '15'])
+        minute_store.append([30, '30'])
+        minute_store.append([45, '45'])
         for minute in range(0, 60):
+            if minute in [0, 15, 30, 45]:
+                continue
             padded = str(minute)
             if minute < 10:
                 padded = '0' + padded
@@ -374,6 +386,10 @@ class EventEditor:
 
 
 class CalendarDisplay(Gtk.EventBox):
+    def __init__(self, parent):
+        Gtk.EventBox.__init__(self)
+        self.parent = parent
+
     def set_bg(self, color):
         '''
         Set the background of the box. Accepts ints between 0 and 256.
@@ -398,6 +414,14 @@ class CalendarDisplay(Gtk.EventBox):
         EventEditor(Event.get_by_id(area.event_id), self)
 
 
+class CalendarEvent(CalendarDisplay):
+    def add_event(self, *args):
+        pass
+
+    def refresh_events(self):
+        pass
+
+
 class CalendarHour(CalendarDisplay):
 
     #                    r    g    b
@@ -409,10 +433,9 @@ class CalendarHour(CalendarDisplay):
     BUSINESS_TODAY   = (120, 170, 120)
 
     def __init__(self, date, hour, parent):
-        CalendarDisplay.__init__(self)
+        CalendarDisplay.__init__(self, parent)
         self.date = date
         self.hour = hour
-        self.parent = parent
         self.is_blocked = False
 
         self.set_events()
@@ -511,9 +534,8 @@ class CalendarDay(CalendarDisplay):
         :param date: Date
         :type date: date
         '''
-        CalendarDisplay.__init__(self)
+        CalendarDisplay.__init__(self, parent)
         self.date = date
-        self.parent = parent
         self.is_blocked = False
 
         self.set_events()
@@ -617,6 +639,199 @@ class CalendarDay(CalendarDisplay):
                 self.set_bg(self.EVEN_WEEKEND)
             else:
                 self.set_bg(self.EVEN_DAY)
+
+
+class DaySeparator(Gtk.DrawingArea):
+    pass
+
+
+class DayView(Gtk.Box):
+
+    def __init__(self, parent, date):
+        Gtk.Box.__init__(self)
+        self.parent = parent
+        self.current_date = date
+        self.one_day = timedelta(1)
+        self.is_new = True
+
+        self.grid = Gtk.Grid(
+            column_spacing=5,
+            row_spacing=0,
+            row_homogeneous=True,
+            hexpand=True,
+        )
+
+        self.scroller = Scroller(min_content_height=40)
+        self.scroller.add(self.grid)
+        self.scroller.connect('size-allocate', self.initial_scroll)
+
+        self.pack_start(self.scroller, True, True, 0)
+
+        self.add_hours()
+
+        self.parent.previous_day_button.connect('clicked', self.decrease)
+        self.parent.next_day_button.connect('clicked', self.increase)
+        self.parent.this_day_button.connect('clicked', self.goto_today)
+
+    def add_hours(self):
+        business_color = Gdk.Color.from_floats(0.8, 0.8, 0.8)
+        line_color = Gdk.Color.from_floats(0.5, 0.5, 0.5)
+        half_line_color = Gdk.Color.from_floats(0.7, 0.7, 0.7)
+        for hour in range(0, 24):
+            # Line before hour
+            first_separator = DaySeparator()
+            first_separator.modify_bg(Gtk.StateType.NORMAL, line_color)
+            first_separator.set_size_request(10, -1)
+            self.grid.attach(first_separator, 0, hour * 60, 1, 1)
+
+            # Hour
+            hour_string = str(hour)
+            if hour < 10:
+                hour_string = '0' + hour_string
+            hour_string = hour_string + ':00'
+            label = Gtk.Label(hour_string)
+            label.set_size_request(30, -1)
+            self.grid.attach(label, 1, hour * 60 - 30, 1, 60)
+
+            # Line after hour
+            separator = DaySeparator()
+            separator.set_hexpand(True)
+            separator.modify_bg(Gtk.StateType.NORMAL, line_color)
+            self.grid.attach(separator, 2, hour * 60, 5, 1)
+
+            # Business hours background
+            if hour > 8 and hour < 17:
+                business_bg = Gtk.DrawingArea()
+                business_bg.modify_bg(Gtk.StateType.NORMAL, business_color)
+                business_bg.set_margin_left(5)
+                business_bg.set_margin_right(15)
+                self.grid.attach(business_bg, 2, hour * 60 + 1, 7, 59)
+
+            # Half-hour line
+            half_line = DaySeparator()
+            half_line.modify_bg(Gtk.StateType.NORMAL, half_line_color)
+            self.grid.attach(half_line, 0, hour * 60 + 30, 7, 1)
+
+    def set_events(self):
+        self.events = set()
+        events = Event.get_by_day(
+            self.current_date.year,
+            self.current_date.month,
+            self.current_date.day
+        )
+        for event in events:
+            self.events.add(event)
+
+    def add_events(self):
+        self.set_events()
+        placed_events = set()
+        for event in self.events:
+            width = 150
+
+            display = CalendarEvent(self)
+            display.set_bg((120, 170, 120))
+            display.event = event
+
+            # Event container
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            display.add(box)
+            label = Gtk.Label(xalign=0)
+            name = event.name
+            if len(name) > 20:
+                name = name[:20] + '...'
+            label.set_text(name)
+            label.set_size_request(width, -1)
+            label.set_alignment(0.05, 0)
+            display.set_size_request(width, -1)
+
+            # Titlebar
+            titlebar = Gtk.DrawingArea()
+            color = Gdk.Color.from_floats(0.3, 0.5, 0.3)
+            titlebar.modify_bg(Gtk.StateType.NORMAL, color)
+            titlebar.set_size_request(width, 5)
+
+            box.pack_start(titlebar, False, False, 0)
+            box.pack_start(label, True, True, 0)
+
+            # Calculate positions of the event
+            start = event.start_hour * 60 + event.start_minute + 2
+            hour_duration = (event.end_hour - event.start_hour) * 60
+            minute_duration = event.end_minute - event.start_minute
+            duration = hour_duration + minute_duration - 3
+
+            display.event.start = start
+            display.event.end = start + duration
+
+            display.set_margin_left(10)
+            # Determine which column the event goes in
+            left = 2
+            for placed_event in placed_events:
+                for i in range(0, duration):
+                    current = event.start + i
+                    higher = placed_event.start < current
+                    lower = placed_event.end > current
+                    if higher and lower:
+                        display.set_margin_left(0)
+                        left = left + 1
+                        break
+
+            placed_events.add(event)
+            self.grid.attach(display, left, start, 1, duration)
+
+            display.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+            display.connect('button-press-event', self.event_click)
+
+    def event_click(self, display, *args):
+        EventEditor(display.event, display)
+
+    def increase(self, *args):
+        self.current_date = self.current_date + self.one_day
+        self.update_days()
+        self.update_gui()
+
+    def decrease(self, *args):
+        self.current_date = self.current_date - self.one_day
+        self.update_days()
+        self.update_gui()
+
+    def initial_scroll(self, *args):
+        if self.is_new and self.scroller.is_initialized():
+            self.scroller.scroll_to(9 * 60 + 15, fast=True)
+            self.is_new = False
+
+    def goto_today(self, *args):
+        self.current_date = date.today()
+        self.update_days()
+        self.update_gui()
+
+    def update_gui(self):
+        for widget in self.grid.get_children():
+            widget.destroy()
+        self.add_hours()
+        self.add_events()
+        self.grid.show_all()
+
+        # Make sure that the lines and hours  are on top of the background
+        for widget in self.grid.get_children():
+            if isinstance(widget, DaySeparator):
+                widget.hide()
+                widget.show()
+
+        # Make sure that the events are on top of the lines
+        for widget in self.grid.get_children():
+            if isinstance(widget, CalendarDisplay):
+                widget.hide()
+                widget.show()
+
+    def update_days(self):
+        days = []
+        for day in range(0, 7):
+            if day == 3:
+                date_string = self.current_date.strftime('%Y-%m-%d')
+                days.append(WeekView.days[3] + ' ' + date_string)
+            else:
+                days.append('')
+        self.parent.set_day_labels(days)
 
 
 class WeekView(Gtk.Box):
@@ -1038,6 +1253,7 @@ class CalendarWindow(Gtk.Window):
         self.toolbar = Gtk.Box()
         self.flex_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.week_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.day_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
 
         # Year dropdown
         year_store = Gtk.ListStore(int, str)
@@ -1066,6 +1282,7 @@ class CalendarWindow(Gtk.Window):
         # Today button
         self.today_button = Gtk.Button('Today')
         self.this_week_button = Gtk.Button('Today')
+        self.this_day_button = Gtk.Button('Today')
         self.flex_box.pack_start(self.today_button, False, False, 0)
 
         # Week arrow left
@@ -1080,6 +1297,19 @@ class CalendarWindow(Gtk.Window):
         self.next_button.add(right_arrow)
         self.week_box.pack_start(self.next_button, False, False, 0)
 
+        # Day arrow left
+        self.previous_day_button = Gtk.Button()
+        left_arrow_day = Gtk.Arrow(Gtk.ArrowType.LEFT, Gtk.ShadowType.NONE)
+        self.previous_day_button.add(left_arrow_day)
+        self.day_box.pack_start(self.previous_day_button, False, False, 0)
+
+        # Day arrow right
+        self.next_day_button = Gtk.Button()
+        right_arrow_day = Gtk.Arrow(Gtk.ArrowType.RIGHT, Gtk.ShadowType.NONE)
+        self.next_day_button.add(right_arrow_day)
+        self.day_box.pack_start(self.next_day_button, False, False, 0)
+
+        self.day_box.pack_start(self.this_day_button, False, False, 10)
         self.week_box.pack_start(self.this_week_button, False, False, 10)
 
         # Week label
@@ -1098,7 +1328,7 @@ class CalendarWindow(Gtk.Window):
         event_box.add(self.stack_switcher)
 
         # Toolbar
-        self.toolbar.add(self.week_box)
+        self.toolbar.add(self.day_box)
         box.pack_start(self.toolbar, True, True, 0)
 
         # File button
@@ -1136,13 +1366,16 @@ class CalendarWindow(Gtk.Window):
         self.app_container.pack_start(self.days_grid, False, True, 5)
 
         # Add views
+        self.day_view = DayView(self, date.today())
+        self.stack.add_titled(self.day_view, 'day', 'Day')
+
         self.week_view = WeekView(self)
         self.stack.add_titled(self.week_view, 'week', 'Week')
 
         self.flex_view = FlexView(self)
         self.stack.add_titled(self.flex_view, 'flex', 'Flex')
 
-        self.current_view = self.week_view
+        self.current_view = self.day_view
         self.current_view.update_days()
 
         self.app_container.pack_start(self.stack, False, True, 5)
@@ -1153,6 +1386,7 @@ class CalendarWindow(Gtk.Window):
         self.add(self.app_container)
         self.show_all()
         self.message_bar.hide()
+        self.current_view.update_gui()
 
     def toggle_google_button(self):
         if not self.config.get('google_sync'):
@@ -1170,12 +1404,18 @@ class CalendarWindow(Gtk.Window):
     def switcher_click(self, __, event):
         '''
         Somewhat hacky way of catching clicks in the stack switcher by
-        comparing the click's x to the middle of the switcher. The first half
-        of the switcher is the Week button and the second half is the Flex
-        button.
+        comparing the click's x to the middle of the switcher. The switcher
+        looks like this:
+
+        | day | week | flex |
+
+        So it is divided into thirds and the correct view is set accordingly.
+
         '''
         allocation = self.stack_switcher.get_allocation()
-        if allocation.width / 2 < event.x:
+        if allocation.width / 3 > event.x:
+            self.set_view('day')
+        elif 2 * allocation.width / 3 < event.x:
             self.set_view('flex')
         else:
             self.set_view('week')
@@ -1189,6 +1429,9 @@ class CalendarWindow(Gtk.Window):
         if view == 'week':
             self.current_view = self.week_view
             self.toolbar.add(self.week_box)
+        elif view == 'day':
+            self.current_view = self.day_view
+            self.toolbar.add(self.day_box)
         else:
             self.current_view = self.flex_view
             self.toolbar.add(self.flex_box)
@@ -1279,8 +1522,8 @@ class Google:
         )
         flags = arg_parser.parse_args([])
         self.CLIENT_SECRETS = os.path.join(
-                os.path.dirname(os.path.realpath(__file__)),
-                'client_secrets.json'
+            os.path.dirname(os.path.realpath(__file__)),
+            'client_secrets.json'
         )
         self.FLOW = client.flow_from_clientsecrets(
             self.CLIENT_SECRETS,
