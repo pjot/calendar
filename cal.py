@@ -92,7 +92,7 @@ class SettingsEditor:
             margin_left=10,
             margin_right=10,
             hexpand=True,
-            vexpand=True
+            vexpand=True,
         )
 
         # Form grid
@@ -178,14 +178,11 @@ class SettingsEditor:
         iterator = combo.get_active_iter()
         model = combo.get_model()
         # 1 is the id, 2 is the name
-        self.calendar_name = model[iterator][2]
         self.calendar_id = model[iterator][1]
+        self.calendar_name = model[iterator][2]
 
     def toggle_google_button(self, switch, *args):
-        if switch.get_active():
-            self.parent.google_button.set_sensitive(True)
-        else:
-            self.parent.google_button.set_sensitive(False)
+        self.parent.google_button.set_sensitive(switch.get_active())
 
     def close(self, *args):
         self.window.destroy()
@@ -220,7 +217,7 @@ class EventEditor:
             margin_left=10,
             margin_right=10,
             hexpand=True,
-            vexpand=True
+            vexpand=True,
         )
 
         # Form grid
@@ -228,7 +225,7 @@ class EventEditor:
             row_spacing=5,
             column_spacing=5,
             hexpand=True,
-            vexpand=True
+            vexpand=True,
         )
 
         # Name field
@@ -276,6 +273,7 @@ class EventEditor:
 
         # Minutes
         minute_store = Gtk.ListStore(int, str)
+        # Put 0, 15, 30 and 45 on top
         minute_store.append([0, '00'])
         minute_store.append([15, '15'])
         minute_store.append([30, '30'])
@@ -347,18 +345,22 @@ class EventEditor:
         date = self.date_entry.get_text()
         event.date = datetime.strptime(date, '%Y-%m-%d').date()
 
+        # Start hour
         iterator = self.start_hour_dropdown.get_active_iter()
         model = self.start_hour_dropdown.get_model()
         event.start_hour = model[iterator][0]
 
+        # Start minute
         iterator = self.start_minute_dropdown.get_active_iter()
         model = self.start_minute_dropdown.get_model()
         event.start_minute = model[iterator][0]
 
+        # End hour
         iterator = self.end_hour_dropdown.get_active_iter()
         model = self.end_hour_dropdown.get_model()
         event.end_hour = model[iterator][0]
 
+        # End minute
         iterator = self.end_minute_dropdown.get_active_iter()
         model = self.end_minute_dropdown.get_model()
         event.end_minute = model[iterator][0]
@@ -367,6 +369,7 @@ class EventEditor:
             google = self.initiator.parent.parent.get_google_client()
             google.set_calendar_id()
             google.export_event(event)
+
         event.save()
 
         self.initiator.add_event(event)
@@ -462,16 +465,14 @@ class CalendarHour(CalendarDisplay):
             self.date.day,
             self.hour,
         )
-        for event in events:
-            self.add_event(event)
+        [self.add_event(event) for event in events]
 
     def refresh_events(self):
         '''
         Refresh the events in the view
         '''
         # Remove all widgets
-        for widget in self.grid.get_children():
-            widget.destroy()
+        [widget.destroy() for widget in self.grid]
         # Re-add them
         self.set_events()
         for i, event in enumerate(self.events):
@@ -569,16 +570,14 @@ class CalendarDay(CalendarDisplay):
             self.date.month,
             self.date.day
         )
-        for event in events:
-            self.add_event(event)
+        [self.add_event(event) for event in events]
 
     def refresh_events(self):
         '''
         Refresh the events in the view
         '''
         # Remove all widgets
-        for widget in self.grid.get_children():
-            widget.destroy()
+        [widget.destroy() for widget in self.grid]
         # Re-add them
         self.set_events()
         for i, event in enumerate(self.events):
@@ -719,8 +718,7 @@ class DayView(Gtk.Box):
             self.current_date.month,
             self.current_date.day
         )
-        for event in events:
-            self.events.add(event)
+        [self.events.add(event) for event in events]
 
     def add_events(self):
         self.set_events()
@@ -786,12 +784,10 @@ class DayView(Gtk.Box):
 
     def increase(self, *args):
         self.current_date = self.current_date + self.one_day
-        self.update_days()
         self.update_gui()
 
     def decrease(self, *args):
         self.current_date = self.current_date - self.one_day
-        self.update_days()
         self.update_gui()
 
     def initial_scroll(self, *args):
@@ -801,27 +797,26 @@ class DayView(Gtk.Box):
 
     def goto_today(self, *args):
         self.current_date = date.today()
-        self.update_days()
         self.update_gui()
 
     def update_gui(self):
-        for widget in self.grid.get_children():
-            widget.destroy()
+        self.update_days()
+        [widget.destroy() for widget in self.grid]
         self.add_hours()
         self.add_events()
         self.grid.show_all()
 
-        # Make sure that the lines and hours  are on top of the background
-        for widget in self.grid.get_children():
-            if isinstance(widget, DaySeparator):
-                widget.hide()
-                widget.show()
+        # Make sure that the lines and hours are on top of the background
+        widgets = self.grid.get_children()
+        [self.toggle(widget) for widget in widgets
+            if isinstance(widget, DaySeparator)]
 
-        # Make sure that the events are on top of the lines
-        for widget in self.grid.get_children():
-            if isinstance(widget, CalendarDisplay):
-                widget.hide()
-                widget.show()
+        [self.toggle(widget) for widget in widgets
+            if isinstance(widget, CalendarDisplay)]
+
+    def toggle(self, widget):
+        widget.hide()
+        widget.show()
 
     def update_days(self):
         days = []
@@ -863,22 +858,18 @@ class WeekView(Gtk.Box):
 
         self.current_week = Week(date.today())
         self.add_days()
-        self.update_gui()
 
     def decrease(self, *args):
         self.current_week.decrease()
         self.add_days()
-        self.update_gui()
 
     def this_week(self, *args):
         self.current_week.set_date(date.today())
         self.add_days()
-        self.update_gui()
 
     def increase(self, *args):
         self.current_week.increase()
         self.add_days()
-        self.update_gui()
 
     def update_days(self):
         first_date = self.get_first_date()
@@ -898,9 +889,7 @@ class WeekView(Gtk.Box):
 
     def add_days(self):
         first_date = self.get_first_date()
-
-        for widget in self.grid.get_children():
-            widget.destroy()
+        [widget.destroy() for widget in self.grid]
 
         # Add all hours in the week
         for day in range(0, 7):
@@ -911,6 +900,7 @@ class WeekView(Gtk.Box):
                 calendar_hour.date = first_date
                 self.grid.attach(calendar_hour, day, hour, 1, 1)
             first_date = first_date + self.one_day
+        self.update_gui()
 
     def hour_click(self, calendar_hour, *args):
         if not calendar_hour.is_blocked:
@@ -931,8 +921,7 @@ class WeekView(Gtk.Box):
         self.update_days()
         self.grid.show_all()
         self.parent.week_label.set_text(self.current_week.get_text())
-        for calendar_hour in self.grid.get_children():
-            calendar_hour.refresh_events()
+        [hour.refresh_events() for hour in self.grid]
 
 
 class Scroller(Gtk.ScrolledWindow):
@@ -1030,18 +1019,19 @@ class FlexView(Gtk.Box):
         if year == self.parent.year:
             return
         # Clear the CalendarDays
-        for widget in self.grid.get_children():
-            widget.destroy()
+        [widget.destroy() for widget in self.grid]
+
         # Add calendar days
         self.parent.year = year
         start_date = date(self.parent.year, 1, 1)
-        day = timedelta(1)
+        one_day = timedelta(1)
         end_date = date(self.parent.year, 12, 31)
+        # Change the start date to a Monday
+        while not start_date.weekday() == 0:
+            start_date = start_date - one_day
+
         x = 0
         y = 0
-        while not start_date.weekday() == 0:
-            start_date = start_date - day
-
         # Loop until we reach the end date
         while start_date < end_date:
             calendar_day = CalendarDay(start_date, self)
@@ -1050,7 +1040,7 @@ class FlexView(Gtk.Box):
                 calendar_day.connect('button-press-event', self.date_click)
             self.grid.attach(calendar_day, x, y, 1, 1)
             # Iterate!
-            start_date = start_date + day
+            start_date = start_date + one_day
             # Keep track of the coordinates in the grid
             if x == 6:
                 x = 0
@@ -1118,7 +1108,7 @@ class FlexView(Gtk.Box):
 
         :returns CalendarDay: The CalendarDay
         '''
-        for day in self.grid.get_children():
+        for day in self.grid:
             if day.date == date:
                 return day
 
@@ -1129,7 +1119,7 @@ class FlexView(Gtk.Box):
         days = {}
         parent_allocation = self.scroller.get_allocation()
         i = 0
-        for day in self.grid.get_children():
+        for day in self.grid:
             # One day per week is enough, speeds up calculation
             if not i == 7:
                 i = i + 1
@@ -1189,8 +1179,7 @@ class FlexView(Gtk.Box):
             EventEditor(event, calendar_day)
 
     def draw(self):
-        for day in self.grid.get_children():
-            day.draw(self.current_month)
+        [day.draw(self.current_month) for day in self.grid]
 
     def update_gui(self):
         '''
@@ -1202,8 +1191,7 @@ class FlexView(Gtk.Box):
         self.parent.month_dropdown.set_active(self.current_month.month - 1)
         self.prevent_default = False
 
-        for calendar_day in self.grid.get_children():
-            calendar_day.refresh_events()
+        [day.refresh_events() for day in self.grid]
         self.parent.show_all()
 
 
@@ -1367,21 +1355,21 @@ class CalendarWindow(Gtk.Window):
 
         # Add views
         self.day_view = DayView(self, date.today())
-        self.stack.add_titled(self.day_view, 'day', 'Day')
-
         self.week_view = WeekView(self)
-        self.stack.add_titled(self.week_view, 'week', 'Week')
-
         self.flex_view = FlexView(self)
-        self.stack.add_titled(self.flex_view, 'flex', 'Flex')
 
-        self.current_view = self.day_view
-        self.current_view.update_days()
+        self.stack.add_titled(self.day_view, 'day', 'Day')
+        self.stack.add_titled(self.week_view, 'week', 'Week')
+        self.stack.add_titled(self.flex_view, 'flex', 'Flex')
 
         self.app_container.pack_start(self.stack, False, True, 5)
 
         # Message bar
         self.app_container.pack_start(self.message_bar, False, True, 5)
+
+        # Day view is the default
+        self.current_view = self.day_view
+        self.current_view.update_days()
 
         self.add(self.app_container)
         self.show_all()
@@ -1389,10 +1377,7 @@ class CalendarWindow(Gtk.Window):
         self.current_view.update_gui()
 
     def toggle_google_button(self):
-        if not self.config.get('google_sync'):
-            self.google_button.set_sensitive(False)
-        else:
-            self.google_button.set_sensitive(True)
+        self.google_button.set_sensitive(bool(self.config.get('google-sync')))
 
     def show_all(self, *args):
         Gtk.Window.show_all(self)
@@ -1423,7 +1408,7 @@ class CalendarWindow(Gtk.Window):
     def set_view(self, view):
         self.stack.set_visible_child_name(view)
 
-        for widget in self.toolbar.get_children():
+        for widget in self.toolbar:
             self.toolbar.remove(widget)
 
         if view == 'week':
@@ -1501,8 +1486,7 @@ class CalendarWindow(Gtk.Window):
                 self.current_view.update_gui()
 
     def set_day_labels(self, labels):
-        for widget in self.days_grid:
-            widget.destroy()
+        [widget.destroy() for widget in self.days_grid]
 
         for x, day in enumerate(labels):
             label = Gtk.Label(vexpand=False, hexpand=False)
