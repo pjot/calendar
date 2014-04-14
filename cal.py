@@ -9,6 +9,7 @@ from oauth2client import client
 from oauth2client import tools
 from event import Event
 from config import Config
+from gui import AppContainer, FormGrid, LeftLabel, RightLabel
 
 import time
 import math
@@ -87,22 +88,13 @@ class SettingsEditor:
         self.parent = parent
         self.window = Gtk.Window()
 
-        app_container = Gtk.Box(
-            orientation=Gtk.Orientation.VERTICAL,
-            margin_left=10,
-            margin_right=10,
-            hexpand=True,
-            vexpand=True,
-        )
+        app_container = AppContainer()
 
         # Form grid
-        grid = Gtk.Grid(
-            row_spacing=5,
-            column_spacing=5,
-        )
+        grid = FormGrid()
 
         # Sync with Google?
-        grid.attach(Gtk.Label('Google Syncing:', xalign=1), 0, 0, 1, 1)
+        grid.attach(RightLabel('Google Syncing:'), 0, 0, 1, 1)
         self.google_sync = Gtk.Switch(hexpand=False)
         self.google_sync.connect('notify::active', self.toggle_google_button)
         if self.parent.config.get('google_sync'):
@@ -115,8 +107,8 @@ class SettingsEditor:
         self.calendar_name = self.parent.config.get('calendar_name')
         self.calendar_id = self.parent.config.get('calendar_id')
         calendar_box = Gtk.Box()
-        grid.attach(Gtk.Label('Calendar:', xalign=1), 0, 1, 1, 1)
-        self.calendar_label = Gtk.Label(self.calendar_name, xalign=0)
+        grid.attach(RightLabel('Calendar:'), 0, 1, 1, 1)
+        self.calendar_label = LeftLabel(self.calendar_name)
         calendar_box.add(self.calendar_label)
         grid.attach(calendar_box, 1, 1, 1, 1)
 
@@ -212,30 +204,19 @@ class EventEditor:
 
         self.window = Gtk.Window()
         self.window.set_size_request(400, 400)
-        app_container = Gtk.Box(
-            orientation=Gtk.Orientation.VERTICAL,
-            margin_left=10,
-            margin_right=10,
-            hexpand=True,
-            vexpand=True,
-        )
+        app_container = AppContainer()
 
         # Form grid
-        grid = Gtk.Grid(
-            row_spacing=5,
-            column_spacing=5,
-            hexpand=True,
-            vexpand=True,
-        )
+        grid = FormGrid()
 
         # Name field
-        grid.attach(Gtk.Label('Name:', xalign=1), 0, 0, 1, 1)
+        grid.attach(RightLabel('Name:'), 0, 0, 1, 1)
         self.name_entry = Gtk.Entry(hexpand=True)
         self.name_entry.set_text(self.event.name)
         grid.attach(self.name_entry, 1, 0, 1, 1)
 
         # Date field
-        grid.attach(Gtk.Label('Date:', xalign=1), 0, 1, 1, 1)
+        grid.attach(RightLabel('Date:'), 0, 1, 1, 1)
         self.date_entry = Gtk.Entry(hexpand=True)
         self.date_entry.set_text(self.date.strftime('%Y-%m-%d'))
         grid.attach(self.date_entry, 1, 1, 1, 1)
@@ -300,14 +281,14 @@ class EventEditor:
         self.end_minute_dropdown.set_active(self.event.end_minute)
         end_time_box.add(self.end_minute_dropdown)
 
-        grid.attach(Gtk.Label('Start Time:', xalign=1), 0, 2, 1, 1)
+        grid.attach(RightLabel('Start Time:'), 0, 2, 1, 1)
         grid.attach(start_time_box, 1, 2, 1, 1)
 
-        grid.attach(Gtk.Label('End Time:', xalign=1), 0, 3, 1, 1)
+        grid.attach(RightLabel('End Time:'), 0, 3, 1, 1)
         grid.attach(end_time_box, 1, 3, 1, 1)
 
         # Location field
-        grid.attach(Gtk.Label('Location:', xalign=1), 0, 4, 1, 1)
+        grid.attach(RightLabel('Location:'), 0, 4, 1, 1)
         self.location_entry = Gtk.Entry(hexpand=True)
         self.location_entry.set_text(self.event.location)
         grid.attach(self.location_entry, 1, 4, 1, 1)
@@ -733,7 +714,7 @@ class DayView(Gtk.Box):
             # Event container
             box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             display.add(box)
-            label = Gtk.Label(xalign=0)
+            label = LeftLabel()
             name = event.name
             if len(name) > 20:
                 name = name[:20] + '...'
