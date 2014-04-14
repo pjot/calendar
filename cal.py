@@ -1,7 +1,6 @@
 from gi.repository import Gtk, Gdk
 from datetime import date, timedelta, datetime
 from dateutil import parser
-from threading import Timer
 from icalendar import Calendar
 from apiclient import discovery
 from oauth2client import file
@@ -9,10 +8,9 @@ from oauth2client import client
 from oauth2client import tools
 from event import Event
 from config import Config
-from gui import AppContainer, FormGrid, LeftLabel, RightLabel
 
+import gui
 import time
-import math
 import sys
 import getopt
 import argparse
@@ -88,13 +86,13 @@ class SettingsEditor:
         self.parent = parent
         self.window = Gtk.Window()
 
-        app_container = AppContainer()
+        app_container = gui.AppContainer()
 
         # Form grid
-        grid = FormGrid()
+        grid = gui.FormGrid()
 
         # Sync with Google?
-        grid.attach(RightLabel('Google Syncing:'), 0, 0, 1, 1)
+        grid.attach(gui.RightLabel('Google Syncing:'), 0, 0, 1, 1)
         self.google_sync = Gtk.Switch(hexpand=False)
         self.google_sync.connect('notify::active', self.toggle_google_button)
         if self.parent.config.get('google_sync'):
@@ -107,8 +105,8 @@ class SettingsEditor:
         self.calendar_name = self.parent.config.get('calendar_name')
         self.calendar_id = self.parent.config.get('calendar_id')
         calendar_box = Gtk.Box()
-        grid.attach(RightLabel('Calendar:'), 0, 1, 1, 1)
-        self.calendar_label = LeftLabel(self.calendar_name)
+        grid.attach(gui.RightLabel('Calendar:'), 0, 1, 1, 1)
+        self.calendar_label = gui.LeftLabel(self.calendar_name)
         calendar_box.add(self.calendar_label)
         grid.attach(calendar_box, 1, 1, 1, 1)
 
@@ -204,19 +202,19 @@ class EventEditor:
 
         self.window = Gtk.Window()
         self.window.set_size_request(400, 400)
-        app_container = AppContainer()
+        app_container = gui.AppContainer()
 
         # Form grid
-        grid = FormGrid()
+        grid = gui.FormGrid()
 
         # Name field
-        grid.attach(RightLabel('Name:'), 0, 0, 1, 1)
+        grid.attach(gui.RightLabel('Name:'), 0, 0, 1, 1)
         self.name_entry = Gtk.Entry(hexpand=True)
         self.name_entry.set_text(self.event.name)
         grid.attach(self.name_entry, 1, 0, 1, 1)
 
         # Date field
-        grid.attach(RightLabel('Date:'), 0, 1, 1, 1)
+        grid.attach(gui.RightLabel('Date:'), 0, 1, 1, 1)
         self.date_entry = Gtk.Entry(hexpand=True)
         self.date_entry.set_text(self.date.strftime('%Y-%m-%d'))
         grid.attach(self.date_entry, 1, 1, 1, 1)
@@ -226,7 +224,6 @@ class EventEditor:
         end_time_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
 
         # Hours
-        renderer_text = Gtk.CellRendererText()
         hour_store = Gtk.ListStore(int, str)
         for hour in range(0, 24):
             padded = str(hour)
@@ -234,17 +231,11 @@ class EventEditor:
                 padded = '0' + padded
             hour_store.append([hour, padded])
 
-        self.start_hour_dropdown = Gtk.ComboBox.new_with_model(hour_store)
-        self.start_hour_dropdown.pack_start(renderer_text, True)
-        self.start_hour_dropdown.add_attribute(renderer_text, 'text', 1)
-        self.start_hour_dropdown.set_property('has-frame', False)
+        self.start_hour_dropdown = gui.TextDropdown.create(hour_store, 1)
         self.start_hour_dropdown.set_active(self.event.start_hour)
         start_time_box.add(self.start_hour_dropdown)
 
-        self.end_hour_dropdown = Gtk.ComboBox.new_with_model(hour_store)
-        self.end_hour_dropdown.pack_end(renderer_text, True)
-        self.end_hour_dropdown.add_attribute(renderer_text, 'text', 1)
-        self.end_hour_dropdown.set_property('has-frame', False)
+        self.end_hour_dropdown = gui.TextDropdown.create(hour_store, 1)
         self.end_hour_dropdown.set_active(self.event.end_hour)
         end_time_box.add(self.end_hour_dropdown)
 
@@ -254,41 +245,28 @@ class EventEditor:
 
         # Minutes
         minute_store = Gtk.ListStore(int, str)
-        # Put 0, 15, 30 and 45 on top
-        minute_store.append([0, '00'])
-        minute_store.append([15, '15'])
-        minute_store.append([30, '30'])
-        minute_store.append([45, '45'])
         for minute in range(0, 60):
-            if minute in [0, 15, 30, 45]:
-                continue
             padded = str(minute)
             if minute < 10:
                 padded = '0' + padded
             minute_store.append([minute, padded])
 
-        self.start_minute_dropdown = Gtk.ComboBox.new_with_model(minute_store)
-        self.start_minute_dropdown.pack_start(renderer_text, True)
-        self.start_minute_dropdown.add_attribute(renderer_text, 'text', 1)
-        self.start_minute_dropdown.set_property('has-frame', False)
+        self.start_minute_dropdown = gui.TextDropdown.create(minute_store, 1)
         self.start_minute_dropdown.set_active(self.event.start_minute)
         start_time_box.add(self.start_minute_dropdown)
 
-        self.end_minute_dropdown = Gtk.ComboBox.new_with_model(minute_store)
-        self.end_minute_dropdown.pack_start(renderer_text, True)
-        self.end_minute_dropdown.add_attribute(renderer_text, 'text', 1)
-        self.end_minute_dropdown.set_property('has-frame', False)
+        self.end_minute_dropdown = gui.TextDropdown.create(minute_store, 1)
         self.end_minute_dropdown.set_active(self.event.end_minute)
         end_time_box.add(self.end_minute_dropdown)
 
-        grid.attach(RightLabel('Start Time:'), 0, 2, 1, 1)
+        grid.attach(gui.RightLabel('Start Time:'), 0, 2, 1, 1)
         grid.attach(start_time_box, 1, 2, 1, 1)
 
-        grid.attach(RightLabel('End Time:'), 0, 3, 1, 1)
+        grid.attach(gui.RightLabel('End Time:'), 0, 3, 1, 1)
         grid.attach(end_time_box, 1, 3, 1, 1)
 
         # Location field
-        grid.attach(RightLabel('Location:'), 0, 4, 1, 1)
+        grid.attach(gui.RightLabel('Location:'), 0, 4, 1, 1)
         self.location_entry = Gtk.Entry(hexpand=True)
         self.location_entry.set_text(self.event.location)
         grid.attach(self.location_entry, 1, 4, 1, 1)
@@ -326,25 +304,11 @@ class EventEditor:
         date = self.date_entry.get_text()
         event.date = datetime.strptime(date, '%Y-%m-%d').date()
 
-        # Start hour
-        iterator = self.start_hour_dropdown.get_active_iter()
-        model = self.start_hour_dropdown.get_model()
-        event.start_hour = model[iterator][0]
-
-        # Start minute
-        iterator = self.start_minute_dropdown.get_active_iter()
-        model = self.start_minute_dropdown.get_model()
-        event.start_minute = model[iterator][0]
-
-        # End hour
-        iterator = self.end_hour_dropdown.get_active_iter()
-        model = self.end_hour_dropdown.get_model()
-        event.end_hour = model[iterator][0]
-
-        # End minute
-        iterator = self.end_minute_dropdown.get_active_iter()
-        model = self.end_minute_dropdown.get_model()
-        event.end_minute = model[iterator][0]
+        # Times
+        event.start_hour = self.start_hour_dropdown.get_value()
+        event.start_minute = self.start_minute_dropdown.get_value()
+        event.end_hour = self.end_hour_dropdown.get_value()
+        event.end_minute = self.end_minute_dropdown.get_value()
 
         if self.initiator.parent.parent.config.get('google_sync'):
             google = self.initiator.parent.parent.get_google_client()
@@ -641,7 +605,7 @@ class DayView(Gtk.Box):
             hexpand=True,
         )
 
-        self.scroller = Scroller(min_content_height=40)
+        self.scroller = gui.Scroller(min_content_height=40)
         self.scroller.add(self.grid)
         self.scroller.connect('size-allocate', self.initial_scroll)
 
@@ -714,7 +678,7 @@ class DayView(Gtk.Box):
             # Event container
             box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             display.add(box)
-            label = LeftLabel()
+            label = gui.LeftLabel()
             name = event.name
             if len(name) > 20:
                 name = name[:20] + '...'
@@ -820,19 +784,14 @@ class WeekView(Gtk.Box):
 
         self.one_day = timedelta(1)
 
-        self.scroller = Scroller(min_content_height=40)
+        self.scroller = gui.Scroller(min_content_height=40)
         self.scroller.connect('size-allocate', self.initial_scroll)
 
         self.parent.previous_button.connect('clicked', self.decrease)
         self.parent.next_button.connect('clicked', self.increase)
         self.parent.this_week_button.connect('clicked', self.this_week)
 
-        self.grid = Gtk.Grid(
-            column_spacing=5,
-            row_spacing=5,
-            column_homogeneous=True,
-            row_homogeneous=True,
-        )
+        self.grid = gui.DayGrid()
 
         self.scroller.add(self.grid)
         self.add(self.scroller)
@@ -905,40 +864,6 @@ class WeekView(Gtk.Box):
         [hour.refresh_events() for hour in self.grid]
 
 
-class Scroller(Gtk.ScrolledWindow):
-    '''
-    Check if the Scroller is initialized
-    '''
-    def is_initialized(self):
-        return self.get_vadjustment().get_property('upper') != 1
-
-    '''
-    Scroll to a certain value of y. If fast == False, it animates the scrolling
-    '''
-    def scroll_to(self, y=None, fast=False):
-        adjustment = self.get_vadjustment()
-        if fast:
-            adjustment.set_value(y)
-            return
-        if y:
-            self.target_y = y
-            self.current_step = 4
-        current_y = adjustment.get_value()
-        current_delta = math.fabs(math.fabs(current_y) - self.target_y)
-        if self.target_y != current_y:
-            if current_delta < self.current_step:
-                current_y = self.target_y
-            else:
-                if current_y > self.target_y:
-                    current_y = current_y - self.current_step
-                else:
-                    current_y = current_y + self.current_step
-            adjustment.set_value(current_y)
-            if self.current_step < 200:
-                self.current_step = self.current_step * 1.4
-            Timer(0.02, self.scroll_to).start()
-
-
 class FlexView(Gtk.Box):
     days = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')
 
@@ -956,16 +881,11 @@ class FlexView(Gtk.Box):
         Gtk.Box.__init__(self)
         self.is_new = True
         self.parent = parent
-        self.scroller = Scroller(min_content_height=40)
+        self.scroller = gui.Scroller(min_content_height=40)
         self.scroller.connect('size-allocate', self.initial_scroll)
 
         # Calendar days
-        self.grid = Gtk.Grid(
-            row_spacing=5,
-            column_spacing=5,
-            row_homogeneous=True,
-            column_homogeneous=True,
-        )
+        self.grid = gui.DayGrid()
         self.scroller.add(self.grid)
 
         self.add(self.scroller)
@@ -1213,7 +1133,7 @@ class CalendarWindow(Gtk.Window):
         self.app_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
         # Message bar
-        self.message_bar = MessageBar(self)
+        self.message_bar = gui.MessageBar(self)
 
         # Toolbar
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -1580,87 +1500,6 @@ class Google:
             items = items + 1
         message = 'Successfully imported {} items'.format(items)
         self.parent.show_message(message)
-
-
-class MessageBar(Gtk.EventBox):
-    SHOW_TIME = 0.01
-    HIDE_TIME = 0.01
-    MAX_HEIGHT = 20
-    STEP_SIZE = 1
-
-    def __init__(self, parent):
-        Gtk.EventBox.__init__(self)
-        self.is_hidden = True
-        self.is_animated = False
-        self.parent = parent
-
-        color = Gdk.Color.from_floats(120/256.0, 170/256.0, 120/256.0)
-
-        self.label = Gtk.Label()
-        self.label.modify_bg(Gtk.StateType.NORMAL, color)
-        self.label.set_size_request(-1, self.MAX_HEIGHT)
-
-        self.area = Gtk.DrawingArea()
-        self.area.set_size_request(-1, 0)
-        self.area.modify_bg(Gtk.StateType.NORMAL, color)
-
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        box.add(self.area)
-        box.add(self.label)
-
-        self.add(box)
-        self.connect('show', self.check_visible)
-
-    def check_visible(self, *args):
-        if self.is_hidden:
-            self.hide()
-
-    def show_message(self, message=None):
-        if self.is_animated:
-            __, height = self.area.get_size_request()
-            if height > self.MAX_HEIGHT:
-                self.is_animated = False
-                self.area.hide()
-                self.area.set_size_request(-1, 0)
-                self.label.show()
-                self.label.set_text(self.message)
-                return
-            self.area.set_size_request(-1, height + self.STEP_SIZE)
-            Timer(self.SHOW_TIME, self.show_message).start()
-            return
-        self.is_hidden = False
-        self.is_animated = True
-        self.message = message + ' (Click to hide)'
-        self.label.set_text('')
-        self.label.hide()
-        self.area.show()
-        self.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
-        self.connect('button-press-event', self.hide_message)
-        self.show()
-        self.set_size_request(-1, 0)
-        Timer(self.SHOW_TIME, self.show_message).start()
-
-    def hide_message(self, *args):
-        if self.is_animated:
-            __, height = self.area.get_size_request()
-            if height == 1:
-                self.is_animated = False
-                self.is_hidden = True
-                self.area.hide()
-                self.label.hide()
-                self.hide()
-                self.label.set_text('')
-                return
-            self.area.set_size_request(-1, height - self.STEP_SIZE)
-            Timer(self.HIDE_TIME, self.hide_message).start()
-            return
-        self.is_animated = True
-        self.is_hidden = False
-        self.label.set_text('')
-        self.label.hide()
-        self.area.show()
-        self.area.set_size_request(-1, self.MAX_HEIGHT)
-        Timer(self.HIDE_TIME, self.hide_message).start()
 
 
 win = CalendarWindow()
