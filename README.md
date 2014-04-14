@@ -5,7 +5,14 @@ To run it just do ./calendar in the repo. I'm not sure which packages it depends
 
 This is a desktop calendar application inspired by gnome-calendar and the Android stock calendar app. I've been using Thunderbird with Lightning as my desktop calendar for ages, but I've always wanted something prettier so started writing this. As of right now, most of it is broken but the main features are already visible.
 
-The application has two main views: Week view and Flex view.
+The application has three main views: Day view, Week view and Flex view.
+
+##Day view
+The Day view is a view of the events of a day, placed neatly even if they overlap:
+![alt_text](https://github.com/pjot/calendar/raw/master/images/day_view.png)
+
+* Clicking an event allows you to edit it
+* Overlapping events will be places side by side
 
 ##Week view
 The Week view is your regular view of a week, with the days in columns. It looks like this:
